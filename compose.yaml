@@ -1,0 +1,27 @@
+name: deiy
+
+services:
+  api:
+    build: .
+    image: deiy-api:1.0.0
+    ports:
+      - "${DEIY_PORT:-8000}:8000"
+    environment:
+      DEIY_ENV: ${DEIY_ENV:-development}
+      DEIY_SECRET_KEY: ${DEIY_SECRET_KEY:-dev-only-change-me-please-32-bytes-minimum}
+      DEIY_PUBLIC_BASE_URL: ${DEIY_PUBLIC_BASE_URL:-http://localhost:8000}
+      DEIY_CORS_ORIGINS: ${DEIY_CORS_ORIGINS:-*}
+      DEIY_DATABASE_URL: sqlite:////data/deiy.db
+      DEIY_STORAGE_ROOT: /data/storage
+      DEIY_AI_PROVIDER: ${DEIY_AI_PROVIDER:-mock}
+      DEIY_AI_TRANSCRIBER: ${DEIY_AI_TRANSCRIBER:-mock}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEIY_MAIL_BACKEND: ${DEIY_MAIL_BACKEND:-outbox}
+      DEIY_JOB_WORKER: "true"
+    volumes:
+      - deiy_data:/data
+    restart: unless-stopped
+
+volumes:
+  deiy_data:
