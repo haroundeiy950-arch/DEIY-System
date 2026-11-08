@@ -23,3 +23,7 @@ var/
 
 # Git
 .git/
+# Backup files
+backup-before-auto-admin/
+*.backup
+*.backup-*
