@@ -19,6 +19,32 @@
     { id: "audit", label: "Audit log" }
   ];
 
+  const FALLBACK_PROGRAMS = [
+    "Computer Science", "Information Technology", "Software Engineering",
+    "Business Administration", "Accounting and Finance", "Nursing", "Public Health",
+    "Education", "Civil Engineering", "Electrical Engineering", "Law", "Agriculture",
+    "Economics", "Social Work", "General Studies"
+  ];
+
+  const FALLBACK_LANGUAGES = [
+    { code: "en", name: "English" },
+    { code: "so", name: "Somali" },
+    { code: "ar", name: "Arabic" }
+  ];
+
+  function programNames(options) {
+    const list = (options && options.programs) || [];
+    if (!list.length) return FALLBACK_PROGRAMS.slice();
+    return list.map(function (program) {
+      return typeof program === "string" ? program : program.name;
+    });
+  }
+
+  function languageList(options) {
+    const list = (options && options.languages) || [];
+    return list.length ? list : FALLBACK_LANGUAGES;
+  }
+
   function roleLabel(role) {
     return { admin: "Administrator", teacher: "Teacher", student: "Student", proctor: "Proctor" }[role] || role;
   }
@@ -124,6 +150,18 @@
       '<div class="row">' + ui.badge(user.status, ui.statusTone(user.status)) +
       (user.email_verified ? ui.badge("email verified", "teal") : ui.badge("unverified", "amber")) + "</div></div>" +
       '<div class="config-grid" style="margin-top:0.35rem">' +
+      '<div class="config-row"><label>Registration number</label><span class="small mono">' +
+      ui.esc(user.registration_number || "—") + "</span></div>" +
+      '<div class="config-row"><label>Program</label><span class="small">' +
+      ui.esc(user.program || "—") + "</span></div>" +
+      '<div class="config-row"><label>Nationality</label><span class="small">' +
+      ui.esc(user.nationality || user.country || "—") + "</span></div>" +
+      '<div class="config-row"><label>Phone number</label><span class="small">' +
+      ui.esc(user.phone_number || "—") + "</span></div>" +
+      '<div class="config-row"><label>Father\'s phone</label><span class="small">' +
+      ui.esc(user.father_phone_number || "—") + "</span></div>" +
+      '<div class="config-row"><label>Sign-in provider</label><span class="small">' +
+      ui.esc(user.auth_provider || "email") + "</span></div>" +
       '<div class="config-row"><label>Date of birth</label><span class="small">' +
       ui.esc(ui.fmtDate(user.date_of_birth)) + "</span></div>" +
       '<div class="config-row"><label>Applied</label><span class="small">' +
@@ -174,13 +212,18 @@
     const status = query.get("status") || "";
     let data;
     try {
-      data = await api.adminUsers({ role: role || undefined, status: status || undefined });
+      const results = await Promise.all([
+        api.adminUsers({ role: role || undefined, status: status || undefined }),
+        api.options().catch(function () { return null; })
+      ]);
+      data = results[0];
+      DEIY.state.options = results[1] || DEIY.state.options || null;
     } catch (error) {
       return ui.errorPanel(error, "Try again");
     }
     const users = data.users || [];
     const roles = ["", "student", "teacher", "proctor", "admin"];
-    const statuses = ["", "active", "pending_email", "pending_approval", "rejected"];
+    const statuses = ["", "active", "pending_email", "pending_approval", "rejected", "suspended", "deleted"];
     const roleOptions = roles.map(function (value) {
       return '<option value="' + value + '"' + (role === value ? " selected" : "") + ">" +
         (value ? roleLabel(value) : "All roles") + "</option>";
@@ -201,7 +244,7 @@
       ui.icon("plus") + " Create staff account</button></div></div>" +
       '<div class="row-between" style="margin-bottom:0.7rem"><p class="small muted">' + users.length +
       " user" + (users.length === 1 ? "" : "s") + "</p></div>" +
-      '<div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th>' +
+      '<div class="table-wrap"><table><thead><tr><th>User</th><th>Program</th><th>Role</th><th>Status</th>' +
       "<th>Academic ID</th><th>Joined</th><th>Actions</th></tr></thead><tbody>" +
       users.map(function (user) {
         const roleSelect = ["student", "teacher", "proctor", "admin"].map(function (value) {
@@ -210,7 +253,9 @@
         }).join("");
         return "<tr data-user=\"" + ui.esc(user.id) + "\">" +
           "<td><div class=\"row\">" + ui.avatar(user, 34) + "<div><strong>" + ui.esc(user.full_name) +
-          "</strong><div class=\"tiny muted\">" + ui.esc(user.email) + "</div></div></div></td>" +
+          "</strong><div class=\"tiny muted\">" + ui.esc(user.email) + "</div>" +
+          '<div class="tiny mono muted">' + ui.esc(user.registration_number || "—") + "</div></div></div></td>" +
+          '<td class="small">' + ui.esc(user.program || "—") + "</td>" +
           '<td><select class="select" data-role-select="' + ui.esc(user.id) + '" aria-label="Role">' +
           roleSelect + "</select></td>" +
           "<td>" + ui.badge(user.status, ui.statusTone(user.status)) + "</td>" +
@@ -224,7 +269,11 @@
               '" data-name="' + ui.esc(user.full_name) + '">Reject</button>'
             : "") +
           '<button class="btn btn-xs btn-ghost" type="button" data-user-details="' + ui.esc(user.id) +
-          '">Details</button></div></td></tr>';
+          '">Details</button>' +
+          '<button class="btn btn-xs btn-ghost" type="button" data-user-edit="' + ui.esc(user.id) +
+          '">Edit</button>' +
+          '<button class="btn btn-xs btn-danger" type="button" data-user-delete="' + ui.esc(user.id) +
+          '" data-name="' + ui.esc(user.full_name) + '">Delete</button></div></td></tr>';
       }).join("") +
       "</tbody></table></div>" +
       (users.length ? "" : ui.emptyState({ icon: "user", title: "No users found", text: "Adjust the filters and try again." }))
@@ -508,6 +557,148 @@
               }
             }
           });
+        });
+      });
+
+      root.querySelectorAll("[data-user-edit]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const id = button.getAttribute("data-user-edit");
+          ui.openModal({
+            title: "Edit user",
+            subtitle: "Changes are validated against the admission rules and written to the audit log.",
+            wide: true,
+            body: '<div id="user-edit-body">' + ui.loading("Loading user…") + "</div>",
+            onMount: async function (modal, close) {
+              const body = modal.querySelector("#user-edit-body");
+              let user;
+              try {
+                const data = await api.adminUser(id);
+                user = data.user;
+              } catch (error) {
+                body.innerHTML = ui.alert(error.message || "Could not load the user.", "error");
+                return;
+              }
+
+              const options = DEIY.state.options || {};
+              const programs = programNames(options);
+              if (user.program && programs.indexOf(user.program) === -1) programs.push(user.program);
+              const programOptions = '<option value="">— Not set —</option>' +
+                programs.map(function (name) {
+                  return '<option value="' + ui.esc(name) + '"' +
+                    (user.program === name ? " selected" : "") + ">" + ui.esc(name) + "</option>";
+                }).join("");
+              const roles = ["student", "teacher", "proctor", "admin"];
+              const roleOptions = roles.map(function (value) {
+                return '<option value="' + value + '"' + (user.role === value ? " selected" : "") +
+                  ">" + ui.esc(roleLabel(value)) + "</option>";
+              }).join("");
+              const statuses = ["pending_email", "pending_approval", "active", "rejected", "suspended"];
+              if (user.status && statuses.indexOf(user.status) === -1) statuses.push(user.status);
+              const statusOptions = statuses.map(function (value) {
+                return '<option value="' + value + '"' + (user.status === value ? " selected" : "") +
+                  ">" + ui.esc(ui.titleCase(value)) + "</option>";
+              }).join("");
+              const languages = languageList(options);
+              const languageOptions = languages.map(function (item) {
+                return '<option value="' + ui.esc(item.code) + '"' +
+                  ((user.language || "en") === item.code ? " selected" : "") + ">" +
+                  ui.esc(item.name) + "</option>";
+              }).join("");
+
+              body.innerHTML =
+                '<form id="user-edit-form" class="stack">' +
+                '<div class="grid-2">' +
+                '<div class="field"><label for="edit-full-name">Full name</label>' +
+                '<input class="input" id="edit-full-name" name="full_name" required value="' +
+                ui.esc(user.full_name || "") + '" />' +
+                '<span class="hint">Four parts: first, second, third and family name.</span></div>' +
+                '<div class="field"><label for="edit-email">Email</label>' +
+                '<input class="input" id="edit-email" name="email" type="email" required value="' +
+                ui.esc(user.email || "") + '" /></div>' +
+                '<div class="field"><label for="edit-program">Program</label>' +
+                '<select class="select" id="edit-program" name="program">' + programOptions + "</select></div>" +
+                '<div class="field"><label for="edit-nationality">Nationality</label>' +
+                '<input class="input" id="edit-nationality" name="nationality" value="' +
+                ui.esc(user.nationality || "") + '" /></div>' +
+                '<div class="field"><label for="edit-phone">Phone number</label>' +
+                '<input class="input" id="edit-phone" name="phone_number" type="tel" value="' +
+                ui.esc(user.phone_number || "") + '" /></div>' +
+                '<div class="field"><label for="edit-father-phone">Father\'s phone number</label>' +
+                '<input class="input" id="edit-father-phone" name="father_phone_number" type="tel" value="' +
+                ui.esc(user.father_phone_number || "") + '" /></div>' +
+                '<div class="field"><label for="edit-role">Role</label>' +
+                '<select class="select" id="edit-role" name="role">' + roleOptions + "</select></div>" +
+                '<div class="field"><label for="edit-status">Status</label>' +
+                '<select class="select" id="edit-status" name="status">' + statusOptions + "</select>" +
+                '<span class="hint">Activating an account requires a verified email and issues an academic ID.</span></div>' +
+                '<div class="field"><label for="edit-language">Preferred language</label>' +
+                '<select class="select" id="edit-language" name="language">' + languageOptions + "</select></div>" +
+                '<div class="field"><label>Registration number</label>' +
+                '<input class="input" value="' + ui.esc(user.registration_number || "—") + '" disabled />' +
+                '<span class="hint">Issued automatically at application time and cannot be edited.</span></div>' +
+                "</div>" +
+                '<div id="user-edit-error" hidden></div>' +
+                '<div class="row"><button class="btn btn-primary" type="submit">Save changes</button>' +
+                '<button class="btn btn-ghost" type="button" data-close-edit>Cancel</button></div></form>';
+
+              const form = modal.querySelector("#user-edit-form");
+              const errorBox = modal.querySelector("#user-edit-error");
+              form.querySelector("[data-close-edit]").addEventListener("click", close);
+              form.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                const submit = form.querySelector('button[type="submit"]');
+                const payload = {
+                  full_name: form.elements.namedItem("full_name").value.trim(),
+                  email: form.elements.namedItem("email").value.trim().toLowerCase(),
+                  role: form.elements.namedItem("role").value,
+                  status: form.elements.namedItem("status").value,
+                  language: form.elements.namedItem("language").value
+                };
+                const optional = {
+                  program: form.elements.namedItem("program").value,
+                  nationality: form.elements.namedItem("nationality").value.trim(),
+                  phone_number: form.elements.namedItem("phone_number").value.trim(),
+                  father_phone_number: form.elements.namedItem("father_phone_number").value.trim()
+                };
+                Object.keys(optional).forEach(function (key) {
+                  if (optional[key]) payload[key] = optional[key];
+                });
+                submit.disabled = true;
+                try {
+                  const result = await api.adminUpdateUser(id, payload);
+                  ui.toast("Saved changes to " + (result.user.full_name || "the user") + ".", "success");
+                  close();
+                  DEIY.rerender();
+                } catch (error) {
+                  errorBox.hidden = false;
+                  errorBox.innerHTML = ui.alert(error.message || "Could not update the user.", "error");
+                  submit.disabled = false;
+                }
+              });
+            }
+          });
+        });
+      });
+
+      root.querySelectorAll("[data-user-delete]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const id = button.getAttribute("data-user-delete");
+          const name = button.getAttribute("data-name") || "this user";
+          const ok = await ui.confirmDialog(
+            "Delete " + name + "? The account can no longer sign in and the email address is released. " +
+              "Exam and audit history are kept.",
+            { title: "Delete user", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          button.disabled = true;
+          try {
+            await api.adminDeleteUser(id);
+            ui.toast("User deleted. The account can no longer sign in.", "success");
+            DEIY.rerender();
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the user.", "error");
+            button.disabled = false;
+          }
         });
       });
 

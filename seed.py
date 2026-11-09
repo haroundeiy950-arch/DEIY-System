@@ -127,6 +127,10 @@ def _ensure_student(
     country: str,
     date_of_birth: date,
     admin: User,
+    program: str = "Computer Science",
+    phone_number: str = "+252 61 234 5678",
+    father_phone_number: str = "+252 61 876 5432",
+    nationality: str | None = None,
 ) -> User:
     existing = _user_by_email(container, email)
     if existing is not None:
@@ -154,6 +158,12 @@ def _ensure_student(
             "photo": "https://placehold.co/512x512/png?text=DEIY",
             "date_of_birth": date_of_birth,
             "country": country,
+            "program": program,
+            "phone_number": phone_number,
+            "father_phone_number": father_phone_number,
+            "nationality": nationality or country,
+            "auth_provider": "email",
+            "language": "en",
         }
     )
     user = container.auth.get_user(registration["user"]["id"])

@@ -59,6 +59,61 @@ class Database:
         from deiy import models  # noqa: F401
 
         Base.metadata.create_all(self.engine)
+        self._apply_light_migrations()
+
+    def _apply_light_migrations(self) -> None:
+        """Add admission columns to databases created before this feature.
+
+        ``create_all`` only creates missing tables; it never alters an existing
+        one.  This keeps the bundled ``deiy.db`` (and any developer database)
+        working without requiring an external migration tool, while remaining
+        safe to run on every boot.
+        """
+
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(self.engine)
+        if "users" not in inspector.get_table_names():
+            return
+
+        existing = {column["name"] for column in inspector.get_columns("users")}
+        additions = {
+            "registration_number": "VARCHAR(40)",
+            "program": "VARCHAR(120)",
+            "phone_number": "VARCHAR(40)",
+            "father_phone_number": "VARCHAR(40)",
+            "nationality": "VARCHAR(100)",
+            "auth_provider": "VARCHAR(30) DEFAULT 'email'",
+            "language": "VARCHAR(10) DEFAULT 'en'",
+        }
+
+        with self.engine.begin() as connection:
+            for name, ddl in additions.items():
+                if name not in existing:
+                    connection.execute(
+                        text(f'ALTER TABLE users ADD COLUMN "{name}" {ddl}')
+                    )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_registration_number "
+                    "ON users (registration_number)"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE users SET nationality = country "
+                    "WHERE nationality IS NULL AND country IS NOT NULL"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE users SET auth_provider = 'email' "
+                    "WHERE auth_provider IS NULL"
+                )
+            )
+            connection.execute(
+                text("UPDATE users SET language = 'en' WHERE language IS NULL")
+            )
 
     def drop_all(self) -> None:
         from deiy import models  # noqa: F401

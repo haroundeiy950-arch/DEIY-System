@@ -13,6 +13,26 @@
     return { admin: "Administrator", teacher: "Teacher", student: "Student", proctor: "Proctor" }[role] || role;
   }
 
+  function providerLabel(provider) {
+    return {
+      email: "Email and password",
+      google: "Google",
+      facebook: "Facebook",
+      other: "Other provider"
+    }[provider || "email"] || provider;
+  }
+
+  function languageLabel(code) {
+    return { en: "English", so: "Somali", ar: "Arabic" }[code || "en"] || code;
+  }
+
+  const FALLBACK_PROGRAMS = [
+    "Computer Science", "Information Technology", "Software Engineering",
+    "Business Administration", "Accounting and Finance", "Nursing", "Public Health",
+    "Education", "Civil Engineering", "Electrical Engineering", "Law", "Agriculture",
+    "Economics", "Social Work", "General Studies"
+  ];
+
   function stat(label, value, note, accent) {
     return (
       '<div class="stat-card' + (accent ? " accent" : "") + '"><span class="stat-label">' + ui.esc(label) +
@@ -338,6 +358,19 @@
         "</strong></div>" +
         '<div class="info-item"><span>Academic ID</span><strong class="mono">' +
         ui.esc(user.academic_id || "Not issued yet") + "</strong></div>" +
+        '<div class="info-item"><span>Registration number</span><strong class="mono">' +
+        ui.esc(user.registration_number || "—") + "</strong></div>" +
+        '<div class="info-item"><span>Program</span><strong>' + ui.esc(user.program || "—") + "</strong></div>" +
+        '<div class="info-item"><span>Nationality</span><strong>' + ui.esc(user.nationality || "—") +
+        "</strong></div>" +
+        '<div class="info-item"><span>Phone number</span><strong>' + ui.esc(user.phone_number || "—") +
+        "</strong></div>" +
+        '<div class="info-item"><span>Father\'s phone number</span><strong>' +
+        ui.esc(user.father_phone_number || "—") + "</strong></div>" +
+        '<div class="info-item"><span>Sign-in provider</span><strong>' +
+        ui.esc(providerLabel(user.auth_provider)) + "</strong></div>" +
+        '<div class="info-item"><span>Preferred language</span><strong>' +
+        ui.esc(languageLabel(user.language)) + "</strong></div>" +
         '<div class="info-item"><span>Email verified</span><strong>' +
         (user.email_verified ? "Yes" : "No") + "</strong></div>" +
         '<div class="info-item"><span>Country</span><strong>' + ui.esc(user.country || "—") + "</strong></div>" +
@@ -345,7 +378,10 @@
         "</strong></div>" +
         '<div class="info-item"><span>Member since</span><strong>' + ui.esc(ui.fmtDate(user.created_at)) +
         "</strong></div></div>" +
-        '<div class="row"><button class="btn btn-ghost btn-sm" type="button" id="sign-out">' +
+        '<div class="row"><button class="btn btn-primary btn-sm" type="button" id="edit-profile">' +
+        ui.icon("settings") + " Edit profile</button>" +
+        '<button class="btn btn-ghost btn-sm" type="button" id="change-password">Change password</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" id="sign-out">' +
         ui.icon("logout") + " Sign out</button></div></div>" +
         '<div class="stack"><div class="panel stack"><h3>What your academic ID is for</h3>' +
         '<p class="small muted">Your academic ID is the unique student identifier generated after approval. ' +
@@ -358,7 +394,164 @@
         '<a class="btn btn-ghost btn-sm" href="#/app/help">Open helpdesk</a></div></div></div>'
       );
     },
-    after: function (root) {
+    after: function (root, ctx) {
+      const user = ctx.user;
+
+      const editProfile = root.querySelector("#edit-profile");
+      if (editProfile) {
+        editProfile.addEventListener("click", async function () {
+          let options = DEIY.state.options;
+          if (!options) {
+            try {
+              options = await api.options();
+              DEIY.state.options = options;
+            } catch (_) {
+              options = null;
+            }
+          }
+          const programs = ((options && options.programs) || [])
+            .map(function (program) { return typeof program === "string" ? program : program.name; });
+          if (!programs.length) FALLBACK_PROGRAMS.forEach(function (name) { programs.push(name); });
+          if (user.program && programs.indexOf(user.program) === -1) programs.push(user.program);
+          const programOptions = '<option value="">— Not set —</option>' +
+            programs.map(function (name) {
+              return '<option value="' + ui.esc(name) + '"' +
+                (user.program === name ? " selected" : "") + ">" + ui.esc(name) + "</option>";
+            }).join("");
+          const languages = (options && options.languages) || [
+            { code: "en", name: "English" }, { code: "so", name: "Somali" }, { code: "ar", name: "Arabic" }
+          ];
+          const languageOptions = languages.map(function (item) {
+            return '<option value="' + ui.esc(item.code) + '"' +
+              ((user.language || "en") === item.code ? " selected" : "") + ">" +
+              ui.esc(item.name) + "</option>";
+          }).join("");
+
+          ui.openModal({
+            title: "Edit your profile",
+            subtitle: "Your registration number and academic ID are issued by the platform and cannot be edited.",
+            wide: true,
+            body:
+              '<form id="profile-form" class="stack">' +
+              '<div class="grid-2">' +
+              '<div class="field"><label for="profile-name">Full name</label>' +
+              '<input class="input" id="profile-name" name="full_name" required value="' +
+              ui.esc(user.full_name || "") + '" />' +
+              '<span class="hint">Four parts: first, second, third and family name.</span></div>' +
+              '<div class="field"><label for="profile-program">Program</label>' +
+              '<select class="select" id="profile-program" name="program">' + programOptions + "</select></div>" +
+              '<div class="field"><label for="profile-nationality">Nationality</label>' +
+              '<input class="input" id="profile-nationality" name="nationality" value="' +
+              ui.esc(user.nationality || "") + '" /></div>' +
+              '<div class="field"><label for="profile-phone">Phone number</label>' +
+              '<input class="input" id="profile-phone" name="phone_number" type="tel" value="' +
+              ui.esc(user.phone_number || "") + '" /></div>' +
+              '<div class="field"><label for="profile-father-phone">Father\'s phone number</label>' +
+              '<input class="input" id="profile-father-phone" name="father_phone_number" type="tel" value="' +
+              ui.esc(user.father_phone_number || "") + '" /></div>' +
+              '<div class="field"><label for="profile-language">Preferred language</label>' +
+              '<select class="select" id="profile-language" name="language">' + languageOptions + "</select></div>" +
+              "</div>" +
+              '<div class="field"><label for="profile-photo">Photo URL (optional)</label>' +
+              '<input class="input" id="profile-photo" name="photo" type="url" ' +
+              'placeholder="https://example.com/photo.jpg" /></div>' +
+              '<div id="profile-error" hidden></div>' +
+              '<div class="row"><button class="btn btn-primary" type="submit">Save profile</button>' +
+              '<button class="btn btn-ghost" type="button" data-close-profile>Cancel</button></div></form>',
+            onMount: function (modal, close) {
+              const form = modal.querySelector("#profile-form");
+              const errorBox = modal.querySelector("#profile-error");
+              form.querySelector("[data-close-profile]").addEventListener("click", close);
+              form.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                const submit = form.querySelector('button[type="submit"]');
+                const payload = {
+                  full_name: form.elements.namedItem("full_name").value.trim(),
+                  program: form.elements.namedItem("program").value,
+                  nationality: form.elements.namedItem("nationality").value.trim(),
+                  phone_number: form.elements.namedItem("phone_number").value.trim(),
+                  father_phone_number: form.elements.namedItem("father_phone_number").value.trim(),
+                  language: form.elements.namedItem("language").value
+                };
+                const photo = form.elements.namedItem("photo").value.trim();
+                if (photo) payload.photo = photo;
+                Object.keys(payload).forEach(function (key) {
+                  if (payload[key] === "") delete payload[key];
+                });
+                submit.disabled = true;
+                try {
+                  const result = await api.updateProfile(payload);
+                  DEIY.state.user = result.user;
+                  ui.toast("Profile updated.", "success");
+                  close();
+                  const language = result.user && result.user.language;
+                  if (language && DEIY.i18n && language !== DEIY.i18n.getLanguage()) {
+                    DEIY.i18n.setLanguage(language);
+                  } else {
+                    DEIY.rerender();
+                  }
+                } catch (error) {
+                  errorBox.hidden = false;
+                  errorBox.innerHTML = ui.alert(error.message || "Could not update your profile.", "error");
+                  submit.disabled = false;
+                }
+              });
+            }
+          });
+        });
+      }
+
+      const changePassword = root.querySelector("#change-password");
+      if (changePassword) {
+        changePassword.addEventListener("click", function () {
+          ui.openModal({
+            title: "Change password",
+            subtitle: "Use at least 8 characters with upper case, lower case and a number.",
+            body:
+              '<form id="password-form" class="stack">' +
+              '<div class="field"><label for="current-password">Current password</label>' +
+              '<input class="input" id="current-password" name="current_password" type="password" ' +
+              'autocomplete="current-password" required /></div>' +
+              '<div class="field"><label for="new-password">New password</label>' +
+              '<input class="input" id="new-password" name="new_password" type="password" ' +
+              'autocomplete="new-password" required minlength="8" /></div>' +
+              '<div class="field"><label for="confirm-new-password">Confirm new password</label>' +
+              '<input class="input" id="confirm-new-password" name="confirm_password" type="password" ' +
+              'autocomplete="new-password" required minlength="8" /></div>' +
+              '<div id="password-error" hidden></div>' +
+              '<button class="btn btn-primary" type="submit">Update password</button></form>',
+            onMount: function (modal, close) {
+              const form = modal.querySelector("#password-form");
+              const errorBox = modal.querySelector("#password-error");
+              form.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                const submit = form.querySelector('button[type="submit"]');
+                const current = form.elements.namedItem("current_password").value;
+                const next = form.elements.namedItem("new_password").value;
+                const confirm = form.elements.namedItem("confirm_password").value;
+                const fail = function (message) {
+                  errorBox.hidden = false;
+                  errorBox.innerHTML = ui.alert(message, "error");
+                  submit.disabled = false;
+                };
+                if (next !== confirm) return fail("The two new passwords do not match.");
+                if (next.length < 8 || !/[A-Z]/.test(next) || !/[a-z]/.test(next) || !/\d/.test(next)) {
+                  return fail("Use at least 8 characters with one upper-case letter, one lower-case letter and a number.");
+                }
+                submit.disabled = true;
+                try {
+                  await api.changePassword(current, next);
+                  ui.toast("Password updated. Use it the next time you sign in.", "success");
+                  close();
+                } catch (error) {
+                  fail(error.message || "Could not change your password.");
+                }
+              });
+            }
+          });
+        });
+      }
+
       const signOut = root.querySelector("#sign-out");
       if (signOut) {
         signOut.addEventListener("click", async function () {

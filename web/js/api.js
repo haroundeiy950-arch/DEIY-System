@@ -142,6 +142,9 @@
     },
 
     /* ---------------------------------------------------------------- auth */
+    options() {
+      return request("/auth/options", { auth: false });
+    },
     register(payload) {
       return request("/auth/register", { method: "POST", auth: false, body: payload });
     },
@@ -172,6 +175,17 @@
       const data = await request("/auth/me");
       if (data && data.user) store.updateUser(data.user);
       return data.user;
+    },
+    async updateProfile(payload) {
+      const data = await request("/auth/me", { method: "PATCH", body: payload });
+      if (data && data.user) store.updateUser(data.user);
+      return data;
+    },
+    changePassword(currentPassword, newPassword) {
+      return request("/auth/change-password", {
+        method: "POST",
+        body: { current_password: currentPassword, new_password: newPassword }
+      });
     },
     logout() {
       const token = store.token();
@@ -318,6 +332,16 @@
         body: { role }
       });
     },
+    adminUpdateUser(id, payload) {
+      return request("/admin/users/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: payload
+      });
+    },
+    adminDeleteUser(id) {
+      return request("/admin/users/" + encodeURIComponent(id), { method: "DELETE" });
+    },
+    adminDatabase() { return request("/admin/database"); },
     createStaff(payload) { return request("/admin/staff", { method: "POST", body: payload }); },
     adminConfig() { return request("/admin/config"); },
     updateAdminConfig(values) {

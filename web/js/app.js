@@ -75,6 +75,59 @@
     return ui.esc(value == null ? "" : String(value));
   }
 
+  function accountLink() {
+    return state.user
+      ? '<a href="#/app/dashboard">Dashboard</a>'
+      : '<a href="#/login">Sign in</a>';
+  }
+
+  function publicHeader() {
+    return '<header class="public-header"><div class="container">' +
+      '<a class="brand" href="#/">' +
+        '<span class="brand-mark">D</span>' +
+        '<span>DEIY<small>Learning platform</small></span>' +
+      '</a>' +
+      '<button class="nav-toggle icon-btn" type="button" data-public-nav-toggle ' +
+        'aria-label="Open menu" aria-expanded="false">' + ui.icon("menu") + '</button>' +
+      '<nav class="public-nav" aria-label="Public navigation">' +
+        '<a href="#/">Home</a>' +
+        '<a href="#/guide">Guide</a>' +
+        '<a href="#/apply">Apply</a>' +
+        accountLink() +
+        '<a class="btn btn-amber btn-sm" href="#/apply">Apply now</a>' +
+      '</nav>' +
+    '</div></header>';
+  }
+
+  function publicFooter() {
+    return '<footer class="public-footer"><div class="container">' +
+      '<span>&copy; ' + new Date().getFullYear() + ' DEIY &middot; Learn without limits</span>' +
+      '<div class="row">' +
+        '<a href="#/guide">Application guide</a>' +
+        '<a href="#/apply">Apply</a>' +
+        accountLink() +
+      '</div>' +
+    '</div></footer>';
+  }
+
+  function bindPublicChrome() {
+    const toggle = document.querySelector("[data-public-nav-toggle]");
+    const nav = document.querySelector(".public-nav");
+    if (!toggle || !nav) return;
+
+    function setOpen(open) {
+      nav.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    toggle.addEventListener("click", function () {
+      setOpen(!nav.classList.contains("open"));
+    });
+    nav.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", function () { setOpen(false); });
+    });
+  }
+
   function parseRoute() {
     const hash = location.hash || "#/";
     const value = hash.replace(/^#/, "") || "/";
@@ -371,6 +424,11 @@
         app.innerHTML = applicationShell(user, page, route);
         bindShell();
         container = document.getElementById("page-content");
+      } else if (page.chrome) {
+        app.innerHTML = '<div class="public-shell">' + publicHeader() +
+          '<div id="public-page"></div>' + publicFooter() + '</div>';
+        bindPublicChrome();
+        container = document.getElementById("public-page");
       } else {
         app.innerHTML = '<div id="public-page"></div>';
         container = document.getElementById("public-page");
@@ -386,6 +444,10 @@
 
       if (typeof page.after === "function") {
         await page.after(container, ctx);
+      }
+
+      if (DEIY.i18n && typeof DEIY.i18n.translateTree === "function") {
+        DEIY.i18n.translateTree(app);
       }
 
       document.title = (page.title || "DEIY") + " · DEIY";
@@ -413,6 +475,10 @@
 
   window.addEventListener("deiy:session-changed", function () {
     state.user = api.store.user();
+    render();
+  });
+
+  window.addEventListener("deiy:language-changed", function () {
     render();
   });
 

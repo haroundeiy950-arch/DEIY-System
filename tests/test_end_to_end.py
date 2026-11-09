@@ -29,6 +29,10 @@ def test_onboarding_rejects_incomplete_name(client):
             "password": "StrongPass1",
             "photo": "https://example.com/p.jpg",
             "date_of_birth": "2001-04-12",
+            "program": "Computer Science",
+            "phone_number": "+252 61 234 5678",
+            "father_phone_number": "+252 61 876 5432",
+            "nationality": "Somali",
             "country": "Somalia",
         },
     )
@@ -46,6 +50,10 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
             "password": "StrongPass1",
             "photo": "https://example.com/photo.jpg",
             "date_of_birth": "2001-04-12",
+            "program": "Computer Science",
+            "phone_number": "+252 61 234 5678",
+            "father_phone_number": "+252 61 876 5432",
+            "nationality": "Somali",
             "country": "Somalia",
         },
     )

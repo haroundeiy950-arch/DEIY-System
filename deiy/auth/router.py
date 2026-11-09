@@ -9,11 +9,12 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select, text
 
 from deiy.api.deps import get_container, get_current_user, require_roles
+from deiy.auth.constants import AUTH_PROVIDERS, LANGUAGES, PROGRAMS
 from deiy.auth.service import user_public
-from deiy.errors import AppError
+from deiy.errors import AppError, Conflict, ValidationFailed
 from deiy.models import AIUsageRecord, AuditLog, User
 from deiy.utils import jsonable
 
@@ -28,7 +29,46 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, examples=["StrongPass1"])
     photo: str = Field(..., description="https URL or image data URI")
     date_of_birth: date
-    country: str = Field(..., examples=["Somalia"])
+    program: str = Field(..., examples=["Computer Science"])
+    phone_number: str = Field(..., examples=["+252 61 234 5678"])
+    father_phone_number: str = Field(..., examples=["+252 61 876 5432"])
+    nationality: str = Field(..., examples=["Somali"])
+    country: str | None = Field(None, examples=["Somalia"])
+    auth_provider: str = Field(
+        "email",
+        description="email | google | facebook | other",
+        examples=["email"],
+    )
+    language: str = Field("en", description="en | so | ar", examples=["en"])
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str | None = None
+    program: str | None = None
+    phone_number: str | None = None
+    father_phone_number: str | None = None
+    nationality: str | None = None
+    country: str | None = None
+    photo: str | None = None
+    language: str | None = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class AdminUserUpdateRequest(BaseModel):
+    full_name: str | None = None
+    email: str | None = None
+    program: str | None = None
+    phone_number: str | None = None
+    father_phone_number: str | None = None
+    nationality: str | None = None
+    country: str | None = None
+    role: str | None = None
+    status: str | None = None
+    language: str | None = None
 
 
 class VerifyRequest(BaseModel):
@@ -71,6 +111,18 @@ class ConfigUpdateRequest(BaseModel):
 
 
 # ------------------------------------------------------------------ onboarding
+@router.get("/options")
+def admission_options(container=Depends(get_container)):
+    """Programs, languages and sign-in providers offered by the platform."""
+
+    return {
+        "programs": PROGRAMS,
+        "languages": LANGUAGES,
+        "auth_providers": AUTH_PROVIDERS,
+        "minimum_age": max(15, int(container.settings.minimum_age)),
+    }
+
+
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest, container=Depends(get_container)):
     return container.auth.register(payload.model_dump())
@@ -138,6 +190,30 @@ def dev_admin_session(request: Request, container=Depends(get_container)):
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     return {"user": user_public(user)}
+
+
+@router.patch("/me")
+def update_me(
+    payload: ProfileUpdateRequest,
+    user: User = Depends(get_current_user),
+    container=Depends(get_container),
+):
+    updated = container.auth.update_profile(
+        user.id, payload.model_dump(exclude_unset=True)
+    )
+    return {"message": "Profile updated.", "user": user_public(updated)}
+
+
+@router.post("/change-password")
+def change_password(
+    payload: PasswordChangeRequest,
+    user: User = Depends(get_current_user),
+    container=Depends(get_container),
+):
+    container.auth.change_password(
+        user.id, payload.current_password, payload.new_password
+    )
+    return {"message": "Password updated."}
 
 
 @router.post("/logout", status_code=200)
@@ -209,6 +285,64 @@ def set_role(
 ):
     user = container.auth.set_role(user_id, payload.role, actor_id=admin.id)
     return {"message": "Role updated.", "user": user_public(user)}
+
+
+@admin_router.patch("/users/{user_id}")
+def update_user(
+    user_id: str,
+    payload: AdminUserUpdateRequest,
+    admin: User = Depends(require_roles("admin")),
+    container=Depends(get_container),
+):
+    changes = payload.model_dump(exclude_unset=True)
+    if user_id == admin.id and changes.get("role") not in (None, "admin"):
+        raise ValidationFailed("You cannot remove your own administrator role.")
+    if user_id == admin.id and changes.get("status") not in (None, "active"):
+        raise ValidationFailed("You cannot deactivate your own administrator account.")
+    user = container.auth.update_user(user_id, changes, actor_id=admin.id)
+    return {"message": "User updated.", "user": user_public(user, include_review=True)}
+
+
+@admin_router.delete("/users/{user_id}")
+def delete_user(
+    user_id: str,
+    admin: User = Depends(require_roles("admin")),
+    container=Depends(get_container),
+):
+    if user_id == admin.id:
+        raise Conflict("You cannot delete your own account.")
+    user = container.auth.delete_user(user_id, actor_id=admin.id)
+    return {
+        "message": "User deleted. The account can no longer sign in.",
+        "user": user_public(user, include_review=True),
+    }
+
+
+@admin_router.get("/database")
+def database_overview(
+    _: User = Depends(require_roles("admin")),
+    container=Depends(get_container),
+):
+    """Row counts for every table so admins can see what the database holds."""
+
+    inspector = inspect(container.db.engine)
+    tables = []
+    total = 0
+    with container.db.session() as session:
+        for name in sorted(inspector.get_table_names()):
+            if name.startswith("sqlite_"):
+                continue
+            count = session.execute(
+                text(f'SELECT COUNT(*) FROM "{name}"')
+            ).scalar() or 0
+            tables.append({"table": name, "rows": int(count)})
+            total += int(count)
+    return {
+        "dialect": container.db.engine.dialect.name,
+        "table_count": len(tables),
+        "total_rows": total,
+        "tables": tables,
+    }
 
 
 @admin_router.post("/staff", status_code=201)

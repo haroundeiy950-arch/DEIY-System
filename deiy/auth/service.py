@@ -17,9 +17,14 @@ import logging
 import re
 from datetime import date, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from deiy.audit import record_audit
+from deiy.auth.constants import (
+    AUTH_PROVIDER_CODES,
+    LANGUAGE_CODES,
+    PROGRAM_NAMES,
+)
 from deiy.config import Settings
 from deiy.db import Database
 from deiy.errors import Conflict, Forbidden, NotFound, Unauthorized, ValidationFailed
@@ -39,7 +44,49 @@ logger = logging.getLogger(__name__)
 
 _NAME_PART_RE = re.compile(r"^[^\W\d_][\w'’\-.]*$", re.UNICODE)
 _DATA_URI_RE = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", re.IGNORECASE | re.S)
+_PHONE_RE = re.compile(r"^\+?[0-9][0-9\s\-()]{6,24}$")
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+
+def _normalise_phone(value: str | None, label: str) -> str:
+    phone = re.sub(r"\s+", " ", (value or "").strip())
+    digits = re.sub(r"\D", "", phone)
+    if not _PHONE_RE.match(phone) or not 7 <= len(digits) <= 15:
+        raise ValidationFailed(
+            f"{label} must be a valid phone number (7-15 digits, optional + and spaces)."
+        )
+    return phone
+
+
+def _normalise_program(value: str | None) -> str:
+    key = (value or "").strip().lower()
+    program = PROGRAM_NAMES.get(key)
+    if not program:
+        raise ValidationFailed(
+            "Choose a valid program of study.",
+            details={"allowed": sorted(PROGRAM_NAMES.values())},
+        )
+    return program
+
+
+def _normalise_language(value: str | None) -> str:
+    code = (value or "en").strip().lower()
+    if code not in LANGUAGE_CODES:
+        raise ValidationFailed(
+            "Unsupported language. Choose English, Somali or Arabic.",
+            details={"allowed": sorted(LANGUAGE_CODES)},
+        )
+    return code
+
+
+def _normalise_provider(value: str | None) -> str:
+    code = (value or "email").strip().lower()
+    if code not in AUTH_PROVIDER_CODES:
+        raise ValidationFailed(
+            "Choose a valid sign-in provider (email, google, facebook or other).",
+            details={"allowed": sorted(AUTH_PROVIDER_CODES)},
+        )
+    return code
 
 
 class AuthService:
@@ -93,15 +140,37 @@ class AuthService:
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
         if dob >= today:
             raise ValidationFailed("Date of birth must be in the past.")
-        if age < self.settings.minimum_age:
+        minimum_age = max(15, int(self.settings.minimum_age))
+        if age < minimum_age:
             raise ValidationFailed(
-                f"Students must be at least {self.settings.minimum_age} years old."
+                f"You must be at least {minimum_age} years old to apply.",
+                details={"minimum_age": minimum_age, "age": age},
             )
-        country = (data.get("country") or "").strip()
+
+        program = _normalise_program(data.get("program"))
+        phone_number = _normalise_phone(data.get("phone_number"), "Phone number")
+        father_phone_number = _normalise_phone(
+            data.get("father_phone_number"), "Father's phone number"
+        )
+        nationality = (data.get("nationality") or "").strip()
+        if not nationality:
+            raise ValidationFailed("Nationality is required.")
+        if len(nationality) > 100:
+            raise ValidationFailed("Nationality is too long.")
+        country = (data.get("country") or nationality).strip()
         if not country:
             raise ValidationFailed("Country / residence is required.")
+        auth_provider = _normalise_provider(data.get("auth_provider"))
+        language = _normalise_language(data.get("language"))
+
         data["email"] = email
         data["country"] = country
+        data["program"] = program
+        data["phone_number"] = phone_number
+        data["father_phone_number"] = father_phone_number
+        data["nationality"] = nationality
+        data["auth_provider"] = auth_provider
+        data["language"] = language
         return parts, dob
 
     def _store_photo(self, user_id: str, photo: str) -> str:
@@ -138,9 +207,12 @@ class AuthService:
                 {
                     "email": email,
                     "country": data["country"],
+                    "nationality": data["nationality"],
+                    "program": data["program"],
+                    "auth_provider": data["auth_provider"],
                     "photo_url": photo_url,
                     "age": age,
-                    "minimum_age": self.settings.minimum_age,
+                    "minimum_age": max(15, int(self.settings.minimum_age)),
                     "name_parts": len(parts),
                 }
             )
@@ -152,6 +224,13 @@ class AuthService:
                 photo_url=photo_url,
                 date_of_birth=dob,
                 country=data["country"],
+                registration_number=self._next_registration_number(session),
+                program=data["program"],
+                phone_number=data["phone_number"],
+                father_phone_number=data["father_phone_number"],
+                nationality=data["nationality"],
+                auth_provider=data["auth_provider"],
+                language=data["language"],
                 role="student",
                 status="pending_email",
                 email_verified=False,
@@ -165,7 +244,12 @@ class AuthService:
                 action="user.registered",
                 actor_id=user.id,
                 target=user.id,
-                meta={"ai_recommendation": review.recommendation, "risk": review.risk_score},
+                meta={
+                    "registration_number": user.registration_number,
+                    "program": user.program,
+                    "ai_recommendation": review.recommendation,
+                    "risk": review.risk_score,
+                },
             )
 
         self._send_welcome(user)
@@ -413,6 +497,23 @@ class AuthService:
         self.events.publish("user.rejected", {"user_id": user.id, "reason": reason})
         return user
 
+    def _next_registration_number(self, session) -> str:
+        """Issue a unique application/registration number at apply time."""
+
+        year = date.today().year
+        prefix = f"DEIY-REG-{year}-"
+        count = session.execute(
+            select(func.count(User.id)).where(User.registration_number.like(prefix + "%"))
+        ).scalar() or 0
+        for sequence in range(count + 1, count + 1_000_000):
+            candidate = f"{prefix}{sequence:06d}"
+            exists = session.execute(
+                select(User.id).where(User.registration_number == candidate)
+            ).first()
+            if not exists:
+                return candidate
+        raise Conflict("Registration number space exhausted.")
+
     def _next_academic_id(self, session, role: str) -> str:
         year = date.today().year
         if role in {"admin", "teacher", "proctor"}:
@@ -452,6 +553,9 @@ class AuthService:
                 email=email,
                 password_hash=hash_password(password),
                 country=data.get("country") or "N/A",
+                nationality=data.get("nationality") or data.get("country") or "N/A",
+                auth_provider="email",
+                language="en",
                 role=role,
                 status="active",
                 email_verified=True,
@@ -490,6 +594,9 @@ class AuthService:
                 email=email.lower(),
                 password_hash=hash_password(password),
                 country="N/A",
+                nationality="N/A",
+                auth_provider="email",
+                language="en",
                 role="admin",
                 status="active",
                 email_verified=True,
@@ -519,6 +626,8 @@ class AuthService:
                 )
             if user.status == "rejected":
                 raise Forbidden("Your application was rejected.", code="application_rejected")
+            if user.status == "deleted":
+                raise Forbidden("This account has been deleted.", code="account_deleted")
             if user.status != "active":
                 raise Forbidden(f"Account is not active (status: {user.status}).")
             user.last_login_at = utcnow()
@@ -592,6 +701,244 @@ class AuthService:
             session.flush()
             return user
 
+    # ------------------------------------------------------------- update/delete
+    def update_user(
+        self, user_id: str, changes: dict, *, actor_id: str | None = None
+    ) -> User:
+        """Update an account as an administrator.
+
+        Only supplied fields are changed. The same validation used at
+        registration is applied to names, programs, phones and nationality.
+        """
+
+        allowed_status = {
+            "pending_email",
+            "pending_approval",
+            "active",
+            "rejected",
+            "suspended",
+            "deleted",
+        }
+        allowed_roles = {"admin", "teacher", "student", "proctor"}
+        with self.db.session() as session:
+            user = session.get(User, user_id)
+            if user is None:
+                raise NotFound("User not found.")
+
+            applied: dict = {}
+            if "full_name" in changes and changes["full_name"] is not None:
+                parts = split_name(changes["full_name"])
+                if len(parts) < 4:
+                    raise ValidationFailed(
+                        "A four-part full name is required (first, second, third, family)."
+                    )
+                for part in parts:
+                    if not _NAME_PART_RE.match(part):
+                        raise ValidationFailed(f"Invalid name part: '{part}'")
+                user.full_name = " ".join(parts)
+                applied["full_name"] = user.full_name
+
+            if "email" in changes and changes["email"] is not None:
+                email = changes["email"].strip().lower()
+                if not is_email(email):
+                    raise ValidationFailed("A valid email address is required.")
+                duplicate = session.execute(
+                    select(User).where(User.email == email, User.id != user.id)
+                ).scalar_one_or_none()
+                if duplicate is not None:
+                    raise Conflict("An account with this email already exists.")
+                user.email = email
+                applied["email"] = email
+
+            if "program" in changes and changes["program"] is not None:
+                user.program = _normalise_program(changes["program"])
+                applied["program"] = user.program
+            if "phone_number" in changes and changes["phone_number"] is not None:
+                user.phone_number = _normalise_phone(
+                    changes["phone_number"], "Phone number"
+                )
+                applied["phone_number"] = user.phone_number
+            if (
+                "father_phone_number" in changes
+                and changes["father_phone_number"] is not None
+            ):
+                user.father_phone_number = _normalise_phone(
+                    changes["father_phone_number"], "Father's phone number"
+                )
+                applied["father_phone_number"] = user.father_phone_number
+            if "nationality" in changes and changes["nationality"] is not None:
+                nationality = changes["nationality"].strip()
+                if not nationality:
+                    raise ValidationFailed("Nationality is required.")
+                user.nationality = nationality
+                applied["nationality"] = nationality
+            if "country" in changes and changes["country"] is not None:
+                user.country = changes["country"].strip() or user.nationality
+                applied["country"] = user.country
+            if "language" in changes and changes["language"] is not None:
+                user.language = _normalise_language(changes["language"])
+                applied["language"] = user.language
+            if "role" in changes and changes["role"] is not None:
+                role = changes["role"].strip().lower()
+                if role not in allowed_roles:
+                    raise ValidationFailed("Unknown role.")
+                user.role = role
+                applied["role"] = role
+            if "status" in changes and changes["status"] is not None:
+                status = changes["status"].strip().lower()
+                if status not in allowed_status:
+                    raise ValidationFailed("Unknown account status.")
+                if status == "active" and not user.email_verified:
+                    raise ValidationFailed(
+                        "The applicant must verify their email before activation."
+                    )
+                if status == "active" and not user.academic_id:
+                    user.academic_id = self._next_academic_id(session, user.role)
+                    applied["academic_id"] = user.academic_id
+                user.status = status
+                applied["status"] = status
+            if "academic_id" in changes and changes["academic_id"] is not None:
+                academic_id = changes["academic_id"].strip()
+                duplicate = session.execute(
+                    select(User).where(
+                        User.academic_id == academic_id, User.id != user.id
+                    )
+                ).scalar_one_or_none()
+                if duplicate is not None:
+                    raise Conflict("That academic ID is already in use.")
+                user.academic_id = academic_id or None
+                applied["academic_id"] = user.academic_id
+
+            record_audit(
+                session,
+                action="user.updated",
+                actor_id=actor_id,
+                target=user.id,
+                meta={"changes": applied},
+            )
+            session.flush()
+            return user
+
+    def update_profile(self, user_id: str, changes: dict) -> User:
+        """Update the fields a signed-in user is allowed to edit themselves."""
+
+        with self.db.session() as session:
+            user = session.get(User, user_id)
+            if user is None:
+                raise NotFound("User not found.")
+
+            applied: dict = {}
+            if changes.get("full_name") is not None:
+                parts = split_name(changes["full_name"])
+                if len(parts) < 4:
+                    raise ValidationFailed(
+                        "A four-part full name is required (first, second, third, family)."
+                    )
+                for part in parts:
+                    if not _NAME_PART_RE.match(part):
+                        raise ValidationFailed(f"Invalid name part: '{part}'")
+                user.full_name = " ".join(parts)
+                applied["full_name"] = user.full_name
+            if changes.get("program") is not None:
+                user.program = _normalise_program(changes["program"])
+                applied["program"] = user.program
+            if changes.get("phone_number") is not None:
+                user.phone_number = _normalise_phone(
+                    changes["phone_number"], "Phone number"
+                )
+                applied["phone_number"] = user.phone_number
+            if changes.get("father_phone_number") is not None:
+                user.father_phone_number = _normalise_phone(
+                    changes["father_phone_number"], "Father's phone number"
+                )
+                applied["father_phone_number"] = user.father_phone_number
+            if changes.get("nationality") is not None:
+                nationality = changes["nationality"].strip()
+                if not nationality:
+                    raise ValidationFailed("Nationality is required.")
+                user.nationality = nationality
+                applied["nationality"] = nationality
+            if changes.get("country") is not None:
+                user.country = changes["country"].strip() or user.nationality
+                applied["country"] = user.country
+            if changes.get("language") is not None:
+                user.language = _normalise_language(changes["language"])
+                applied["language"] = user.language
+            if changes.get("photo"):
+                user.photo_url = self._store_photo(user.id, changes["photo"])
+                applied["photo"] = "updated"
+
+            record_audit(
+                session,
+                action="user.profile_updated",
+                actor_id=user.id,
+                target=user.id,
+                meta={"changes": applied},
+            )
+            session.flush()
+            return user
+
+    def change_password(
+        self, user_id: str, current_password: str, new_password: str
+    ) -> None:
+        if (
+            len(new_password) < 8
+            or not re.search(r"[A-Z]", new_password)
+            or not re.search(r"[a-z]", new_password)
+            or not re.search(r"\d", new_password)
+        ):
+            raise ValidationFailed(
+                "New password must be at least 8 characters and include upper case, "
+                "lower case and a digit."
+            )
+        with self.db.session() as session:
+            user = session.get(User, user_id)
+            if user is None:
+                raise NotFound("User not found.")
+            if not verify_password(current_password, user.password_hash):
+                raise ValidationFailed("The current password is not correct.")
+            user.password_hash = hash_password(new_password)
+            record_audit(
+                session,
+                action="user.password_changed",
+                actor_id=user.id,
+                target=user.id,
+            )
+            session.flush()
+
+    def delete_user(self, user_id: str, *, actor_id: str | None = None) -> User:
+        """Delete an account by deactivating it and anonymising the sign-in.
+
+        A soft delete keeps exam, attendance and audit history intact while
+        immediately blocking sign-in and freeing the email address for a future
+        application.
+        """
+
+        with self.db.session() as session:
+            user = session.get(User, user_id)
+            if user is None:
+                raise NotFound("User not found.")
+            if user.role == "admin":
+                raise Conflict("Administrator accounts cannot be deleted this way.")
+            original_email = user.email
+            user.status = "deleted"
+            user.email_verified = False
+            user.rejection_reason = "Account deleted by an administrator."
+            # Release the address so the same person can submit a new application.
+            user.email = f"deleted+{user.id}@deiy.invalid"
+            record_audit(
+                session,
+                action="user.deleted",
+                actor_id=actor_id,
+                target=user.id,
+                meta={
+                    "email": original_email,
+                    "registration_number": user.registration_number,
+                },
+            )
+            session.flush()
+            return user
+
 
 def user_public(user: User, *, include_review: bool = False) -> dict:
     payload = {
@@ -602,6 +949,13 @@ def user_public(user: User, *, include_review: bool = False) -> dict:
         "status": user.status,
         "email_verified": user.email_verified,
         "academic_id": user.academic_id,
+        "registration_number": user.registration_number,
+        "program": user.program,
+        "phone_number": user.phone_number,
+        "father_phone_number": user.father_phone_number,
+        "nationality": user.nationality,
+        "auth_provider": user.auth_provider,
+        "language": user.language,
         "photo_url": user.photo_url,
         "country": user.country,
         "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,

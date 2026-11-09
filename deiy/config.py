@@ -124,7 +124,7 @@ class Settings:
     media_url_ttl_seconds: int = 60 * 60
 
     # Onboarding policy
-    minimum_age: int = 13
+    minimum_age: int = 15
     expose_dev_codes: bool = True
 
     # Study rooms (spec section 4)

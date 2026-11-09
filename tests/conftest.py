@@ -83,7 +83,13 @@ def onboard(client, container, admin_token):
                 "password": password,
                 "photo": "https://example.com/photo.jpg",
                 "date_of_birth": "2001-04-12",
+                "program": "Computer Science",
+                "phone_number": "+252 61 234 5678",
+                "father_phone_number": "+252 61 876 5432",
+                "nationality": "Somali",
                 "country": "Somalia",
+                "auth_provider": "email",
+                "language": "en",
             },
         )
         assert response.status_code == 201, response.text

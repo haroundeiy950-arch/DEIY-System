@@ -37,6 +37,7 @@ python run.py
 
 Open:
 
+- Web app: <http://localhost:8000/ui/>
 - API docs: <http://localhost:8000/docs>
 - ReDoc: <http://localhost:8000/redoc>
 - Health: <http://localhost:8000/health>
@@ -146,12 +147,20 @@ container = build_container()
 
 Modules: `deiy/auth/`, `deiy/security.py`, `deiy/models.py`
 
-- Four-part full-name validation, email/password rules, photograph upload (data URI stored
-  behind a signed URL), date of birth with minimum-age policy, and country.
+- Admission form collects the four-part full name, program of study, nationality, phone
+  number, father/guardian phone number, date of birth, country and photograph.
+- A **minimum age of 15** is enforced in the API, the admin configuration (floor of 15), the
+  public guide and the web form.
+- Every application receives a unique **registration number** at submission time:
+  `DEIY-REG-{YYYY}-{sequence:06d}`. It is shown to the applicant, stored on the user record
+  and displayed in the admin console and profile.
+- Applicants choose how they will sign in: **email and password**, **Google**, **Facebook**
+  or **another provider**. Every application still verifies its email address before review;
+  provider choice is recorded on the account for future OAuth linking.
 - Status lifecycle: `pending_email` → `pending_approval` → `active` (or `rejected`).
 - Automated welcome email, then **6-digit OTP or activation link** verification.
 - Admin review queue with approve/reject actions and reasons.
-- Automatic unique academic IDs:
+- Automatic unique academic IDs on approval:
   - students: `DEIY-{YYYY}-{sequence:06d}`
   - staff: `DEIY-ADMIN-0001`, `DEIY-TEACH-0001`, `DEIY-PROCT-0001`
 - Activation email containing the academic ID, plus in-app notifications.
@@ -161,23 +170,46 @@ Modules: `deiy/auth/`, `deiy/security.py`, `deiy/models.py`
   requirement, room duration, token/media lifetimes). Changes are range-validated, persisted
   in `system_settings`, applied immediately, and written to the audit log.
 
+### Admission, profile and CRUD
+
+- Programs, languages and sign-in providers are defined once in `deiy/auth/constants.py`
+  and exposed through `GET /auth/options`, so the API, guide and web form always agree.
+- Supported UI languages: **English (`en`)**, **Somali (`so`)** and **Arabic (`ar`, RTL)**.
+  The web app stores the choice in `localStorage`, translates rendered labels and switches
+  the document direction for Arabic. Untranslated labels fall back to English.
+- Applicants and staff can update their own profile (name, program, nationality, phone
+  numbers, country, photo and preferred language) and change their password.
+- Administrators can edit any user (including role and status) and delete accounts. Deletion
+  is a **soft delete**: the account can no longer sign in, the email address is anonymised
+  and released for a future application, and exam/audit history is preserved. Administrator
+  accounts are protected from deletion, self-demotion and self-deactivation.
+- `GET /admin/database` returns row counts for every table.
+- Existing databases are upgraded automatically at startup: `Database.create_all()` adds any
+  missing admission columns without requiring Alembic.
+
 Endpoints:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/auth/register` | Register with the required profile data |
+| GET | `/auth/options` | Programs, languages, providers and minimum age |
+| POST | `/auth/register` | Register with the required admission data |
 | POST | `/auth/verify-email` | Verify with OTP or activation token |
 | POST | `/auth/resend-verification` | Issue a new OTP/link |
 | POST | `/auth/login` | Issue a JWT |
 | GET | `/auth/me` | Current identity |
+| PATCH | `/auth/me` | Update own profile fields |
+| POST | `/auth/change-password` | Change own password |
 | POST | `/auth/logout` | Client-side sign-out |
 | GET | `/admin/applications` | Pending applications |
 | GET | `/admin/users` | List/filter users |
 | GET | `/admin/users/{id}` | Application detail with AI review |
+| PATCH | `/admin/users/{id}` | Edit any user (profile, role, status, language) |
+| DELETE | `/admin/users/{id}` | Soft-delete a non-admin account |
 | POST | `/admin/users/{id}/approve` | Approve and generate an academic ID |
 | POST | `/admin/users/{id}/reject` | Reject with a reason |
 | PATCH | `/admin/users/{id}/role` | Change a role |
 | POST | `/admin/staff` | Create teacher/proctor/admin accounts |
+| GET | `/admin/database` | Row counts for every database table |
 | GET | `/admin/config` | Effective and editable runtime configuration |
 | PATCH | `/admin/config` | Persisted, validated, audited policy changes |
 | GET | `/admin/ai-usage` | AI call and cost breakdown |
@@ -377,15 +409,22 @@ deiy/
     engine.py        routing, fallback and cost metering
     mock.py          deterministic offline stack
     providers.py     Whisper + Gemini HTTP adapters
-  auth/              onboarding, verification, approval, login, staff
+  auth/              onboarding, verification, approval, login, staff, CRUD
+    constants.py     shared programs, languages and sign-in providers
   library/           courses, resources, search, watermarking, live sessions
   exams/             authoring, camera checks, attempts, autosave, integrity
   rooms/             capacity/camera rules, WebRTC bootstrap, AI summaries
   utilities/         calendar, gradebook, notifications, helpdesk, assignments
   infra/             storage, media pipeline, watermark, mailers, job queue
+web/                 dependency-free web client served at /ui/
+  index.html         shell, language picker and script loading
+  css/styles.css     design system, responsive layout and RTL rules
+  js/i18n.js         English/Somali/Arabic dictionaries and tree translation
+  js/pages-*.js      public, app, admin and domain page modules
 tests/
   conftest.py        isolated app/container fixtures
   test_end_to_end.py full flows for all five specification sections
+  test_admission.py  admission fields, minimum age, CRUD and language options
   test_admin_config.py runtime configuration permissions/persistence
   test_config.py     settings and .env loading
   test_seed.py       demo-data creation and idempotency
@@ -398,6 +437,14 @@ compose.yaml         API service + persistent data volume
 ---
 
 ## Operational notes
+
+### Database schema and upgrades
+
+`Database.create_all()` creates missing tables and then runs a lightweight migration that
+adds any admission columns missing from an existing database (`registration_number`,
+`program`, `phone_number`, `father_phone_number`, `nationality`, `auth_provider` and
+`language`). This keeps an existing `deiy.db` working without Alembic. For production
+PostgreSQL deployments, use Alembic for versioned, reversible schema changes.
 
 ### Background jobs
 

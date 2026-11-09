@@ -42,6 +42,15 @@ class User(Base):
     photo_url: Mapped[str | None] = mapped_column(String(1000))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     country: Mapped[str | None] = mapped_column(String(100))
+    registration_number: Mapped[str | None] = mapped_column(
+        String(40), unique=True, index=True
+    )
+    program: Mapped[str | None] = mapped_column(String(120), index=True)
+    phone_number: Mapped[str | None] = mapped_column(String(40))
+    father_phone_number: Mapped[str | None] = mapped_column(String(40))
+    nationality: Mapped[str | None] = mapped_column(String(100))
+    auth_provider: Mapped[str] = mapped_column(String(30), default="email")
+    language: Mapped[str] = mapped_column(String(10), default="en")
     role: Mapped[str] = mapped_column(String(20), default="student", index=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_email", index=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)

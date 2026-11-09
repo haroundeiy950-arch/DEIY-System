@@ -43,7 +43,7 @@ class SettingSpec:
 
 EDITABLE_SETTINGS: dict[str, SettingSpec] = {
     "minimum_age": SettingSpec(
-        int, 13, 100, "Minimum age for student registration."
+        int, 15, 100, "Minimum age for student registration (cannot be below 15)."
     ),
     "expose_dev_codes": SettingSpec(
         bool, None, None, "Return OTPs and activation links in API responses (development only)."

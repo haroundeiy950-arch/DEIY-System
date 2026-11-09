@@ -21,11 +21,38 @@
     "Canada", "Germany", "France", "Netherlands", "Sweden", "Norway", "Australia"
   ];
 
+  const FALLBACK_PROGRAMS = [
+    { code: "CS", name: "Computer Science" },
+    { code: "IT", name: "Information Technology" },
+    { code: "SE", name: "Software Engineering" },
+    { code: "BBA", name: "Business Administration" },
+    { code: "AF", name: "Accounting and Finance" },
+    { code: "NUR", name: "Nursing" },
+    { code: "PH", name: "Public Health" },
+    { code: "EDU", name: "Education" },
+    { code: "CE", name: "Civil Engineering" },
+    { code: "EE", name: "Electrical Engineering" },
+    { code: "LAW", name: "Law" },
+    { code: "AGR", name: "Agriculture" },
+    { code: "ECO", name: "Economics" },
+    { code: "SW", name: "Social Work" },
+    { code: "GEN", name: "General Studies" }
+  ];
+
+  const AUTH_PROVIDERS = [
+    { code: "email", name: "Email and password" },
+    { code: "google", name: "Google" },
+    { code: "facebook", name: "Facebook" },
+    { code: "other", name: "Other provider" }
+  ];
+
   const FALLBACK_GUIDE = {
-    minimum_age: 13,
+    minimum_age: 15,
+    programs: FALLBACK_PROGRAMS,
+    auth_providers: AUTH_PROVIDERS,
     steps: [
       { title: "Create your account", description: "Enter your four-part full name, email and a strong password." },
-      { title: "Add your details", description: "Choose your date of birth and country, then upload a clear photo." },
+      { title: "Add your details", description: "Choose your program, nationality, phone numbers and date of birth, then upload a clear photo." },
       { title: "Verify your email", description: "Enter the 6-digit code or use the activation link we email you." },
       { title: "Wait for approval", description: "An administrator reviews your application, usually within 1–2 working days." },
       { title: "Start learning", description: "Your academic ID arrives by email; sign in to open the library and exams." }
@@ -63,6 +90,7 @@
 
   pages.landing = {
     public: true,
+    chrome: true,
     title: "DEIY · Learn without limits",
     render: async function (ctx) {
       let guide = guideFor(ctx);
@@ -79,7 +107,7 @@
         {
           icon: "user",
           title: "A guided application",
-          text: "Four name parts, a photo and your country — nothing more. The assistant explains each field as you go.",
+          text: "Four name parts, a photo, your program, nationality and phone numbers. The assistant explains each field as you go.",
           link: "#/apply",
           cta: "Start your application"
         },
@@ -179,7 +207,7 @@
         '<div class="steps-grid">' +
         [
           ["Create your account", "Four name parts, one email and a password with upper case, lower case and a number."],
-          ["Add your photo and details", "A clear JPG, PNG or WebP under 5 MB, your date of birth and your country."],
+          ["Add your photo and details", "Your program, nationality, phone numbers, date of birth, country and a clear JPG, PNG or WebP under 5 MB."],
           ["Verify your email", "Type the 6-digit code from your inbox. Codes last 10 minutes and can be resent."],
           ["Get approved and sign in", "An administrator reviews your application. Your academic ID arrives by email."]
         ]
@@ -247,13 +275,22 @@
       const countries = COUNTRIES.map(function (name) {
         return '<option value="' + ui.esc(name) + '">' + ui.esc(name) + "</option>";
       }).join("");
+      const programs = (guide.programs || FALLBACK_PROGRAMS).map(function (program) {
+        return '<option value="' + ui.esc(program.name) + '">' + ui.esc(program.name) +
+          " (" + ui.esc(program.code) + ")</option>";
+      }).join("");
+      const providers = (guide.auth_providers || AUTH_PROVIDERS).map(function (provider) {
+        return '<option value="' + ui.esc(provider.code) + '">' + ui.esc(provider.name) + "</option>";
+      }).join("");
       return (
         '<section class="section-tight"><div class="container" style="max-width:900px">' +
         '<div class="auth-card wide">' +
         '<span class="eyebrow">Application</span>' +
         "<h1>Join DEIY in three short steps</h1>" +
-        '<p class="lead">You do not need to prepare documents. You need your name, an email address, ' +
-        "a password, your date of birth, your country and a clear photo.</p>" +
+        '<p class="lead">You do not need to prepare documents. You need your full name, an email ' +
+        "address, a password, your program of study, your nationality, your phone numbers, your " +
+        "date of birth and a clear photo. You must be at least " + ui.esc(guide.minimum_age || 15) +
+        " years old.</p>" +
         '<div class="row" style="margin-top:0.9rem">' +
         '<button class="btn btn-ghost btn-sm" type="button" data-assistant="How do I apply step by step?">' +
         ui.icon("spark") + " Ask the AI guide</button>" +
@@ -281,12 +318,26 @@
 
         '<div class="wizard-pane" data-step="2" hidden>' +
         '<div class="form-grid">' +
+        '<div class="field"><label for="program">Program of study</label>' +
+        '<select class="select" id="program" name="program" required>' +
+        '<option value="">Choose your program</option>' + programs + "</select></div>" +
+        '<div class="field"><label for="nationality">Nationality</label>' +
+        '<select class="select" id="nationality" name="nationality" required>' +
+        '<option value="">Choose your nationality</option>' + countries + "</select></div>" +
         '<div class="field"><label for="dob">Date of birth</label>' +
         '<input class="input" id="dob" name="date_of_birth" type="date" required />' +
-        '<span class="hint">You must be at least ' + ui.esc(guide.minimum_age || 13) + " years old.</span></div>" +
+        '<span class="hint">You must be at least ' + ui.esc(guide.minimum_age || 15) + " years old.</span></div>" +
         '<div class="field"><label for="country">Country / residence</label>' +
         '<select class="select" id="country" name="country" required>' +
         '<option value="">Choose your country</option>' + countries + "</select></div>" +
+        '<div class="field"><label for="phone_number">Phone number</label>' +
+        '<input class="input" id="phone_number" name="phone_number" type="tel" ' +
+        'placeholder="+252 61 234 5678" required />' +
+        '<span class="hint">Your own number, including the country code.</span></div>' +
+        '<div class="field"><label for="father_phone_number">Father\'s phone number</label>' +
+        '<input class="input" id="father_phone_number" name="father_phone_number" type="tel" ' +
+        'placeholder="+252 61 876 5432" required />' +
+        '<span class="hint">A parent or guardian number we can call.</span></div>' +
         "</div>" +
         '<div class="photo-drop"><div class="photo-preview" id="photo-preview">' + ui.icon("user") + "</div>" +
         '<div class="stack-sm"><strong>Your photo</strong>' +
@@ -305,6 +356,10 @@
         field("Create a password", "password", "password", "At least 8 characters",
           "Include upper case, lower case and a number") +
         field("Confirm password", "confirm_password", "password", "Repeat your password", "") +
+        '<div class="span-2 field"><label for="auth_provider">How will you sign in?</label>' +
+        '<select class="select" id="auth_provider" name="auth_provider">' + providers + "</select>" +
+        '<span class="hint">Choose Google, Facebook or another provider if you prefer. ' +
+        "Every application still verifies its email address before review.</span></div>" +
         "</div>" +
         '<div id="apply-review" class="review-list"></div>' +
         '<label class="checkbox"><input type="checkbox" id="apply-truth" />' +
@@ -341,9 +396,31 @@
           email: (byName("email").value || "").trim().toLowerCase(),
           date_of_birth: byName("date_of_birth").value,
           country: byName("country").value,
+          nationality: byName("nationality").value,
+          program: byName("program").value,
+          phone_number: (byName("phone_number").value || "").trim(),
+          father_phone_number: (byName("father_phone_number").value || "").trim(),
+          auth_provider: byName("auth_provider").value || "email",
           password: byName("password").value,
           photo: photoData || (byName("photo_url").value || "").trim()
         };
+      };
+
+      const phoneValid = function (value) {
+        const digits = String(value || "").replace(/\D/g, "");
+        return digits.length >= 7 && digits.length <= 15;
+      };
+
+      const ageOn = function (isoDate) {
+        const dob = new Date(isoDate + "T00:00:00");
+        if (isNaN(dob.getTime())) return -1;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const beforeBirthday =
+          today.getMonth() < dob.getMonth() ||
+          (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate());
+        if (beforeBirthday) age -= 1;
+        return age;
       };
       const showError = function (message) {
         errorBox.hidden = false;
@@ -365,6 +442,14 @@
         }
         if (target === 3) {
           const data = values();
+          if (!data.program) {
+            ui.toast("Choose your program of study.", "error");
+            return;
+          }
+          if (!data.nationality) {
+            ui.toast("Choose your nationality.", "error");
+            return;
+          }
           if (!data.date_of_birth) {
             ui.toast("Choose your date of birth.", "error");
             return;
@@ -374,8 +459,21 @@
             ui.toast("Date of birth must be in the past.", "error");
             return;
           }
+          const minimumAge = Number(guide.minimum_age || 15);
+          if (ageOn(data.date_of_birth) < minimumAge) {
+            ui.toast("You must be at least " + minimumAge + " years old to apply.", "error");
+            return;
+          }
           if (!data.country) {
             ui.toast("Choose your country.", "error");
+            return;
+          }
+          if (!phoneValid(data.phone_number)) {
+            ui.toast("Enter a valid phone number (7-15 digits).", "error");
+            return;
+          }
+          if (!phoneValid(data.father_phone_number)) {
+            ui.toast("Enter a valid father/guardian phone number (7-15 digits).", "error");
             return;
           }
           if (!data.photo) {
@@ -399,11 +497,19 @@
       const renderReview = function () {
         const data = values();
         const review = root.querySelector("#apply-review");
+        const provider = (guide.auth_providers || AUTH_PROVIDERS).filter(function (item) {
+          return item.code === data.auth_provider;
+        })[0];
         const rows = [
           ["Full name", [data.first_name, data.second_name, data.third_name, data.family_name].join(" ")],
           ["Email", data.email],
+          ["Program of study", data.program],
+          ["Nationality", data.nationality],
+          ["Phone number", data.phone_number],
+          ["Father's phone number", data.father_phone_number],
           ["Date of birth", ui.fmtDate(data.date_of_birth)],
           ["Country", data.country],
+          ["Sign-in method", provider ? provider.name : data.auth_provider],
           ["Photo", data.photo.indexOf("data:image/") === 0 ? "Uploaded photo" : data.photo]
         ];
         review.innerHTML = rows
@@ -485,12 +591,26 @@
             password: data.password,
             photo: data.photo,
             date_of_birth: data.date_of_birth,
-            country: data.country
+            program: data.program,
+            phone_number: data.phone_number,
+            father_phone_number: data.father_phone_number,
+            nationality: data.nationality,
+            country: data.country,
+            auth_provider: data.auth_provider,
+            language: DEIY.i18n ? DEIY.i18n.getLanguage() : "en"
           });
           api.store.pendingEmail(data.email);
           storeDevCode(result);
           if (result.dev_link) sessionStorage.setItem("deiy.dev_link", result.dev_link);
-          ui.toast("Application received. Check your email for the 6-digit code.", "success");
+          if (result.user && result.user.registration_number) {
+            sessionStorage.setItem("deiy.registration_number", result.user.registration_number);
+          }
+          ui.toast(
+            "Application received. Registration number: " +
+              ((result.user && result.user.registration_number) || "issued") +
+              ". Check your email for the 6-digit code.",
+            "success"
+          );
           DEIY.go("#/verify");
         } catch (error) {
           showError(error.message || "We could not submit your application.");
@@ -519,6 +639,7 @@
       const token = ctx.query.get("token") || "";
       const error = ctx.query.get("error") || "";
       const pending = api.store.getPendingEmail() || "";
+      const registration = sessionStorage.getItem("deiy.registration_number") || "";
       return (
         '<section class="section-tight"><div class="container" style="max-width:620px">' +
         '<div class="auth-card">' +
@@ -527,6 +648,9 @@
         '<p class="lead">Enter the 6-digit code we sent to your inbox, or use the activation link from the email. ' +
         "Codes expire after 10 minutes.</p>" +
         (error ? ui.alert(error, "error") : "") +
+        (registration
+          ? ui.alert("Your registration number is " + registration + ". Keep it for your records.", "success")
+          : "") +
         (token ? ui.alert("We are verifying your activation link…", "info") : "") +
         devHint() +
         '<div id="verify-result"></div>' +
@@ -689,6 +813,12 @@
         '<span class="small muted">New here? <a href="#/apply">Apply for an account</a></span>' +
         '<button class="btn btn-xs btn-ghost" type="button" data-assistant="I need help signing in">Need help?</button>' +
         "</div>" +
+        '<div class="panel-flat" style="margin-top:1rem;padding:0.9rem;border:1px solid var(--line);border-radius:12px">' +
+        '<strong class="small">Prefer Google, Facebook or another provider?</strong>' +
+        '<p class="tiny muted" style="margin:0.35rem 0 0.6rem">Choose your provider on the ' +
+        "application form. Every application verifies its email address before an administrator " +
+        "reviews it.</p>" +
+        '<a class="btn btn-ghost btn-sm" href="#/apply">Apply with a provider</a></div>' +
         '<div class="divider"></div>' +
         '<p class="tiny muted"><strong>Demo accounts</strong> (after running <code>python seed.py</code>)</p>' +
         '<div class="chat-suggestions" style="margin-top:0.5rem">' +
@@ -762,6 +892,7 @@
   /* -------------------------------------------------------------------- guide */
   pages.guide = {
     public: true,
+    chrome: true,
     title: "Application guide",
     render: async function (ctx) {
       const guide = guideFor(ctx);
@@ -794,9 +925,9 @@
                   ui.esc(item.detail) + "</strong></div>";
               })
               .join("")
-          : '<p class="small muted">A four-part full name, email, strong password, photo, date of birth and country.</p>') +
+          : '<p class="small muted">A four-part full name, email, strong password, program, nationality, phone numbers, photo, date of birth and country.</p>') +
         '<div class="divider"></div><h3>Good to know</h3>' +
-        '<div class="info-item"><span>Minimum age</span><strong>' + ui.esc(guide.minimum_age || 13) +
+        '<div class="info-item"><span>Minimum age</span><strong>' + ui.esc(guide.minimum_age || 15) +
         " years</strong></div>" +
         '<div class="info-item"><span>Code length</span><strong>6 digits</strong></div>' +
         '<div class="info-item"><span>Code lifetime</span><strong>' +

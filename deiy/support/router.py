@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from deiy.api.deps import get_container
+from deiy.auth.constants import AUTH_PROVIDERS, LANGUAGES, PROGRAMS
 from deiy.errors import RateLimited
 
 router = APIRouter(prefix="/support", tags=["Public Support & AI Assistant"])
@@ -55,8 +56,9 @@ APPLICATION_STEPS: list[dict[str, str]] = [
     {
         "title": "Add your details and photo",
         "description": (
-            "Choose your date of birth and country, then upload a clear personal "
-            "photo (JPG, PNG or WebP, 5 MB or smaller). A photo URL also works."
+            "Choose your program of study, nationality, date of birth and phone "
+            "numbers (yours and your father's), then upload a clear personal photo "
+            "(JPG, PNG or WebP, 5 MB or smaller). A photo URL also works."
         ),
         "action": "Open the form",
         "target": "#/apply",
@@ -98,20 +100,31 @@ REQUIREMENTS: list[dict[str, str]] = [
         "detail": "Example: Amina Yusuf Hassan Ali (first, second, third, family).",
     },
     {
+        "label": "Program of study",
+        "detail": "Choose one program from the list shown on the application form.",
+    },
+    {
         "label": "A valid email address",
-        "detail": "All verification and approval messages are sent to this address.",
+        "detail": (
+            "Register with your own email, or choose Google, Facebook or another "
+            "provider. Verification and approval messages are sent by email."
+        ),
     },
     {
         "label": "A strong password",
         "detail": "At least 8 characters with upper case, lower case and a digit.",
     },
     {
-        "label": "A personal photograph",
-        "detail": "JPG, PNG or WebP, 5 MB or smaller, or an https image URL.",
+        "label": "Phone numbers",
+        "detail": "Your own phone number and your father's (or guardian's) phone number.",
     },
     {
-        "label": "Date of birth and country",
-        "detail": "You must meet the platform's minimum age requirement.",
+        "label": "Nationality and date of birth",
+        "detail": "You must be at least 15 years old to apply.",
+    },
+    {
+        "label": "A personal photograph",
+        "detail": "JPG, PNG or WebP, 5 MB or smaller, or an https image URL.",
     },
 ]
 
@@ -127,8 +140,31 @@ FAQ: list[dict[str, str]] = [
     {
         "question": "What do I need before I start?",
         "answer": (
-            "A four-part full name, a valid email address, a strong password, your "
-            "date of birth, your country and a clear personal photo."
+            "A four-part full name, your program of study, a valid email address, a "
+            "strong password, your phone number, your father's phone number, your "
+            "nationality, your date of birth and a clear personal photo."
+        ),
+    },
+    {
+        "question": "What is the minimum age to apply?",
+        "answer": (
+            "You must be at least 15 years old on the day you apply. Applications "
+            "from younger applicants are not accepted."
+        ),
+    },
+    {
+        "question": "Can I register with Google or Facebook?",
+        "answer": (
+            "Yes. On the application form you can choose email and password, Google, "
+            "Facebook or another provider. Every application still verifies its email "
+            "address before an administrator reviews it."
+        ),
+    },
+    {
+        "question": "Which languages are available?",
+        "answer": (
+            "The platform is available in English, Somali and Arabic. Use the language "
+            "selector at the top of the page to switch at any time."
         ),
     },
     {
@@ -176,10 +212,13 @@ def application_guide(container=Depends(get_container)) -> dict:
     """Machine-readable application guide used by the public frontend."""
 
     return {
-        "minimum_age": container.settings.minimum_age,
+        "minimum_age": max(15, int(container.settings.minimum_age)),
         "photo_max_mb": 5,
         "otp_length": 6,
         "otp_ttl_minutes": max(1, container.settings.otp_ttl_seconds // 60),
+        "programs": PROGRAMS,
+        "languages": LANGUAGES,
+        "auth_providers": AUTH_PROVIDERS,
         "steps": APPLICATION_STEPS,
         "requirements": REQUIREMENTS,
         "faq": FAQ,
