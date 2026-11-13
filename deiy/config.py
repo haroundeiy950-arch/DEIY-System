@@ -105,7 +105,7 @@ class Settings:
     secret_key: str = "dev-only-change-me-please-32-bytes-minimum"
     public_base_url: str = "http://localhost:8000"
 
-    # Persistence / storage
+    
     database_url: str = "sqlite:///./deiy.db"
     storage_root: Path = Path("./var/storage")
     storage_backend: str = "local"  # local | s3
@@ -115,7 +115,7 @@ class Settings:
     s3_access_key: str = ""
     s3_secret_key: str = ""
 
-    # Tokens
+    
     access_token_ttl_seconds: int = 12 * 3600
     activation_token_ttl_seconds: int = 3 * 24 * 3600
     otp_ttl_seconds: int = 10 * 60
@@ -123,24 +123,24 @@ class Settings:
     watermark_ttl_seconds: int = 15 * 60
     media_url_ttl_seconds: int = 60 * 60
 
-    # Onboarding policy
+    
     minimum_age: int = 15
     expose_dev_codes: bool = True
 
-    # Study rooms (spec section 4)
+    
     room_min_capacity: int = 10
     room_max_capacity: int = 15
     room_max_duration_minutes: int = 45
     summary_sla_minutes: int = 10
 
-    # Exams (spec section 3)
+    
     default_exam_duration_minutes: int = 60
     auto_submit_on_expiry: bool = True
     require_camera_for_exam: bool = True
 
-    # AI stack (spec section 5B: Whisper STT + Gemini summarization)
-    ai_provider: str = "mock"  # mock | gemini
-    ai_transcriber: str = "mock"  # mock | whisper
+    
+    ai_provider: str = "mock"  
+    ai_transcriber: str = "mock"  
     openai_api_key: str = ""
     gemini_api_key: str = ""
     whisper_model: str = "whisper-1"
@@ -149,8 +149,8 @@ class Settings:
     ai_cost_per_audio_minute_usd: float = 0.006
     ai_cost_per_1k_tokens_usd: float = 0.0005
 
-    # Mail
-    mail_backend: str = "outbox"  # outbox | console | smtp
+    
+    mail_backend: str = "outbox"  
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
@@ -158,15 +158,15 @@ class Settings:
     smtp_use_tls: bool = True
     mail_from: str = "no-reply@deiy.example"
 
-    # Background processing
+    
     job_worker_enabled: bool = True
     job_poll_interval_seconds: float = 0.5
     job_max_attempts: int = 3
 
-    # Public AI assistant (available before sign-in)
+    
     assistant_rate_limit_per_minute: int = 30
 
-    # Web / CORS
+    
     cors_origins: tuple[str, ...] = field(default_factory=lambda: ("*",))
 
     @classmethod

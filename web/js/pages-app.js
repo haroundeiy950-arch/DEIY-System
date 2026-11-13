@@ -1,6 +1,3 @@
-/* ==========================================================================
-   DEIY app pages: dashboard, calendar, notifications, profile.
-   ========================================================================== */
 (function () {
   "use strict";
 
@@ -58,7 +55,7 @@
     }).join("");
   }
 
-  /* ----------------------------------------------------------------- dashboard */
+
   pages.dashboard = {
     app: true,
     title: "Dashboard",
@@ -229,7 +226,6 @@
     }
   };
 
-  /* ------------------------------------------------------------------ calendar */
   pages.calendar = {
     app: true,
     title: "Calendar",
@@ -278,7 +274,7 @@
     }
   };
 
-  /* ------------------------------------------------------------- notifications */
+ 
   pages.notifications = {
     app: true,
     title: "Notifications",
@@ -304,7 +300,9 @@
                 " · " + ui.esc(item.channel || "in-app") + "</span></div>" +
                 (item.read ? ui.badge("read", "outline") :
                   '<button class="btn btn-xs btn-ghost" type="button" data-read="' + ui.esc(item.id) +
-                  '">Mark read</button>') + "</div>";
+                  '">Mark read</button>') +
+                '<button class="btn btn-xs btn-danger" type="button" data-delete-notification="' +
+                ui.esc(item.id) + '">Delete</button>' + "</div>";
             }).join("") + "</div>"
           : ui.emptyState({ icon: "bell", title: "No notifications", text: "Approval, exam and room summaries will arrive here." })) +
         "</div>"
@@ -337,10 +335,23 @@
           }
         });
       });
+      root.querySelectorAll("[data-delete-notification]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          button.disabled = true;
+          try {
+            await api.deleteNotification(button.getAttribute("data-delete-notification"));
+            ui.toast("Notification deleted.", "success");
+            DEIY.rerender();
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the notification.", "error");
+            button.disabled = false;
+          }
+        });
+      });
     }
   };
 
-  /* ------------------------------------------------------------------- profile */
+ 
   pages.profile = {
     app: true,
     title: "Profile",

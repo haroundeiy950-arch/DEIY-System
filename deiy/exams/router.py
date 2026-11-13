@@ -123,6 +123,16 @@ def list_attempts(
     return {"count": len(attempts), "attempts": [attempt_public(a) for a in attempts]}
 
 
+@router.delete("/{exam_id}")
+def delete_exam(
+    exam_id: str,
+    user: User = Depends(require_roles("admin", "teacher")),
+    container=Depends(get_container),
+):
+    exam = container.exams.delete_exam(exam_id, actor_id=user.id)
+    return {"message": "Exam deleted.", "exam": exam}
+
+
 @router.get("/{exam_id}")
 def get_exam(
     exam_id: str,

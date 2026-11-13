@@ -1,9 +1,3 @@
-/* ==========================================================================
-   DEIY API client
-   Small, dependency-free wrapper around the FastAPI backend. The bearer token
-   is kept in localStorage; every error becomes an ApiError with a friendly
-   message so the UI can show it directly.
-   ========================================================================== */
 (function () {
   "use strict";
 
@@ -51,7 +45,7 @@
       try {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
-      } catch (_) { /* ignore */ }
+      } catch (_) {  }
     }
   };
 
@@ -141,7 +135,7 @@
       });
     },
 
-    /* ---------------------------------------------------------------- auth */
+    
     options() {
       return request("/auth/options", { auth: false });
     },
@@ -193,7 +187,6 @@
       if (token) request("/auth/logout", { method: "POST" }).catch(() => {});
     },
 
-    /* ------------------------------------------------------------- library */
     courses(params) { return request("/library/courses" + query(params)); },
     resources(params) { return request("/library/resources" + query(params)); },
     resource(id) { return request("/library/resources/" + encodeURIComponent(id)); },
@@ -206,9 +199,18 @@
     },
     liveSessions(params) { return request("/library/live-sessions" + query(params)); },
     createCourse(payload) { return request("/library/courses", { method: "POST", body: payload }); },
+    deleteCourse(id) {
+      return request("/library/courses/" + encodeURIComponent(id), { method: "DELETE" });
+    },
     createResource(payload) { return request("/library/resources", { method: "POST", body: payload }); },
+    deleteResource(id) {
+      return request("/library/resources/" + encodeURIComponent(id), { method: "DELETE" });
+    },
     scheduleLiveSession(payload) {
       return request("/library/live-sessions", { method: "POST", body: payload });
+    },
+    deleteLiveSession(id) {
+      return request("/library/live-sessions/" + encodeURIComponent(id), { method: "DELETE" });
     },
     startLiveSession(id) {
       return request("/library/live-sessions/" + encodeURIComponent(id) + "/start", { method: "POST" });
@@ -217,9 +219,11 @@
       return request("/library/live-sessions/" + encodeURIComponent(id) + "/end", { method: "POST" });
     },
 
-    /* --------------------------------------------------------------- exams */
     exams(params) { return request("/exams" + query(params)); },
     exam(id) { return request("/exams/" + encodeURIComponent(id)); },
+    deleteExam(id) {
+      return request("/exams/" + encodeURIComponent(id), { method: "DELETE" });
+    },
     cameraCheck(id, payload) {
       return request("/exams/" + encodeURIComponent(id) + "/camera-check", { method: "POST", body: payload });
     },
@@ -249,10 +253,13 @@
       return request("/exams/" + encodeURIComponent(examId) + "/attempts");
     },
 
-    /* --------------------------------------------------------------- rooms */
+    
     rooms(params) { return request("/rooms" + query(params)); },
     createRoom(payload) { return request("/rooms", { method: "POST", body: payload }); },
     room(id) { return request("/rooms/" + encodeURIComponent(id)); },
+    deleteRoom(id) {
+      return request("/rooms/" + encodeURIComponent(id), { method: "DELETE" });
+    },
     joinRoom(id, payload) {
       return request("/rooms/" + encodeURIComponent(id) + "/join", { method: "POST", body: payload });
     },
@@ -267,7 +274,6 @@
     },
     roomSummary(id) { return request("/rooms/" + encodeURIComponent(id) + "/summary"); },
 
-    /* ----------------------------------------------------------- utilities */
     calendar() { return request("/utilities/calendar"); },
     gradebook(studentId, insights) {
       return request("/utilities/gradebook" + query({ student_id: studentId, insights: insights !== false }));
@@ -281,6 +287,9 @@
     markNotificationRead(id) {
       return request("/utilities/notifications/" + encodeURIComponent(id) + "/read", { method: "POST" });
     },
+    deleteNotification(id) {
+      return request("/utilities/notifications/" + encodeURIComponent(id), { method: "DELETE" });
+    },
     helpdesk(question) {
       return request("/utilities/helpdesk", { method: "POST", body: { question } });
     },
@@ -289,12 +298,18 @@
     },
     tickets(params) { return request("/utilities/tickets" + query(params)); },
     ticket(id) { return request("/utilities/tickets/" + encodeURIComponent(id)); },
+    deleteTicket(id) {
+      return request("/utilities/tickets/" + encodeURIComponent(id), { method: "DELETE" });
+    },
     replyTicket(id, body) {
       return request("/utilities/tickets/" + encodeURIComponent(id) + "/reply", { method: "POST", body: { body } });
     },
     assignments(params) { return request("/utilities/assignments" + query(params)); },
     createAssignment(payload) {
       return request("/utilities/assignments", { method: "POST", body: payload });
+    },
+    deleteAssignment(id) {
+      return request("/utilities/assignments/" + encodeURIComponent(id), { method: "DELETE" });
     },
     submitAssignment(id, content) {
       return request("/utilities/assignments/" + encodeURIComponent(id) + "/submit", {
@@ -313,7 +328,7 @@
     },
     metrics() { return request("/utilities/metrics"); },
 
-    /* --------------------------------------------------------------- admin */
+  
     adminUsers(params) { return request("/admin/users" + query(params)); },
     adminApplications() { return request("/admin/applications"); },
     adminUser(id) { return request("/admin/users/" + encodeURIComponent(id)); },
@@ -342,6 +357,36 @@
       return request("/admin/users/" + encodeURIComponent(id), { method: "DELETE" });
     },
     adminDatabase() { return request("/admin/database"); },
+    async adminDatabaseDownload() {
+      const token = store.token();
+      const headers = token ? { Authorization: "Bearer " + token } : {};
+      let response;
+      try {
+        response = await fetch("/admin/database/download", { headers });
+      } catch (error) {
+        throw new ApiError("Cannot reach the DEIY server. Check your connection and try again.", {
+          code: "network_error"
+        });
+      }
+      if (!response.ok) {
+        let message = "Could not download the database (" + response.status + ").";
+        try {
+          const payload = await response.json();
+          if (payload && (payload.message || payload.detail)) message = payload.message || payload.detail;
+        } catch (_) { /* ignore */ }
+        throw new ApiError(message, { status: response.status });
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "deiy-backup.db";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      return true;
+    },
     createStaff(payload) { return request("/admin/staff", { method: "POST", body: payload }); },
     adminConfig() { return request("/admin/config"); },
     updateAdminConfig(values) {

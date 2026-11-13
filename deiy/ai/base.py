@@ -41,7 +41,7 @@ class SummaryReport:
 @dataclass(slots=True)
 class RegistrationReview:
     risk_score: float
-    recommendation: str  # approve | review | reject
+    recommendation: str  
     flags: list[str] = field(default_factory=list)
     rationale: str = ""
     provider: str = "mock"
@@ -53,7 +53,7 @@ class RegistrationReview:
 @dataclass(slots=True)
 class IntegrityReport:
     risk_score: float
-    recommendation: str  # clear | flag_for_review | invalidate
+    recommendation: str 
     flags: list[str] = field(default_factory=list)
     rationale: str = ""
     provider: str = "mock"

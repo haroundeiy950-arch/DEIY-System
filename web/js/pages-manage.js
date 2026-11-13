@@ -1,7 +1,4 @@
-/* ==========================================================================
-   DEIY authoring: create courses, upload library resources, schedule live
-   sessions, build proctored exams and create assignments.
-   ========================================================================== */
+
 (function () {
   "use strict";
 
@@ -49,7 +46,7 @@
     return date.toISOString();
   }
 
-  /* ------------------------------------------------------------------ course */
+
   async function coursePanel(courses) {
     return (
       '<div class="grid-2" style="align-items:start">' +
@@ -79,14 +76,17 @@
               '<div class="list-body"><strong>' + ui.esc(course.code + " · " + course.title) + "</strong><span>" +
               ui.esc(course.department) + " · " + ui.esc(course.level) +
               (course.description ? " · " + ui.esc(course.description).slice(0, 80) : "") +
-              "</span></div></div>";
+              "</span></div>" +
+              '<div class="list-actions"><button class="btn btn-xs btn-danger" type="button" ' +
+              'data-delete-course="' + ui.esc(course.id) + '" data-name="' +
+              ui.esc(course.code + " · " + course.title) + '">Delete</button></div></div>';
           }).join("") + "</div>"
         : '<p class="small muted">No courses yet. Create the first one.</p>') +
       "</div></div>"
     );
   }
 
-  /* ---------------------------------------------------------------- resource */
+
   async function resourcePanel(courses) {
     let recent = [];
     try {
@@ -133,14 +133,17 @@
             ) + "</span><div class=\"list-body\"><strong>" + ui.esc(item.title) + "</strong><span>" +
               ui.esc(ui.titleCase(item.kind)) + " · " + ui.esc(item.author || "DEIY") +
               (item.ai_summary ? " · " + ui.esc(item.ai_summary).slice(0, 70) : "") +
-              "</span></div></div>";
+              "</span></div>" +
+              '<div class="list-actions"><button class="btn btn-xs btn-danger" type="button" ' +
+              'data-delete-resource="' + ui.esc(item.id) + '" data-name="' + ui.esc(item.title) +
+              '">Delete</button></div></div>';
           }).join("") + "</div>"
         : '<p class="small muted">Nothing published yet.</p>') +
       "</div></div>"
     );
   }
 
-  /* -------------------------------------------------------------------- live */
+
   async function livePanel(courses) {
     let sessions = [];
     try {
@@ -181,6 +184,8 @@
                 ? '<button class="btn btn-xs btn-danger" type="button" data-end-live="' +
                   ui.esc(session.id) + '">End</button>'
                 : "") +
+              '<button class="btn btn-xs btn-danger" type="button" data-delete-live="' +
+              ui.esc(session.id) + '" data-name="' + ui.esc(session.title) + '">Delete</button>' +
               "</div></div>";
           }).join("") + "</div>"
         : '<p class="small muted">No live sessions scheduled.</p>') +
@@ -188,7 +193,7 @@
     );
   }
 
-  /* -------------------------------------------------------------------- exam */
+
   function questionBlock(index) {
     return (
       '<div class="question-card" data-exam-question>' +
@@ -263,15 +268,17 @@
               '<div class="list-body"><strong>' + ui.esc(exam.title) + "</strong><span>" +
               ui.esc(ui.fmtDate(exam.starts_at, true)) + " → " + ui.esc(ui.fmtDate(exam.ends_at, true)) +
               " · " + ui.esc(exam.status) + "</span></div>" +
-              '<a class="btn btn-xs btn-ghost" href="#/app/exams/' + encodeURIComponent(exam.id) +
-              '">Open</a></div>';
+              '<div class="list-actions"><a class="btn btn-xs btn-ghost" href="#/app/exams/' +
+              encodeURIComponent(exam.id) + '">Open</a>' +
+              '<button class="btn btn-xs btn-danger" type="button" data-delete-exam="' +
+              ui.esc(exam.id) + '" data-name="' + ui.esc(exam.title) + '">Delete</button></div></div>';
           }).join("") + "</div>"
         : '<p class="small muted">No exams created yet.</p>') +
       "</div>"
     );
   }
 
-  /* -------------------------------------------------------------- assignment */
+ 
   async function assignmentPanel(courses) {
     let assignments = [];
     try {
@@ -302,14 +309,16 @@
             return '<div class="list-row"><span class="list-icon">' + ui.icon("file") + "</span>" +
               '<div class="list-body"><strong>' + ui.esc(item.title) + "</strong><span>Due " +
               ui.esc(ui.fmtDate(item.due_at, true)) + "</span></div>" +
-              '<a class="btn btn-xs btn-ghost" href="#/app/assignments">Open</a></div>';
+              '<div class="list-actions"><a class="btn btn-xs btn-ghost" href="#/app/assignments">Open</a>' +
+              '<button class="btn btn-xs btn-danger" type="button" data-delete-assignment="' +
+              ui.esc(item.id) + '" data-name="' + ui.esc(item.title) + '">Delete</button></div></div>';
           }).join("") + "</div>"
         : '<p class="small muted">No assignments created yet.</p>') +
       "</div></div>"
     );
   }
 
-  /* ----------------------------------------------------------------------- page */
+
   pages.manage = {
     app: true,
     title: "Author content",
@@ -356,7 +365,46 @@
         ui.toast(message, "error");
       }
 
-      /* ------------------------------------------------------------- course */
+      function bindDelete(selector, attribute, request, title, warning) {
+        root.querySelectorAll(selector).forEach(function (button) {
+          button.addEventListener("click", async function () {
+            const id = button.getAttribute(attribute);
+            const name = button.getAttribute("data-name") || "this item";
+            const ok = await ui.confirmDialog(
+              "Delete " + name + "? " + warning,
+              { title: title, confirmLabel: "Delete", danger: true }
+            );
+            if (!ok) return;
+            button.disabled = true;
+            try {
+              await request(id);
+              ui.toast(title.replace(/^Delete /, "") + " deleted.", "success");
+              DEIY.rerender();
+            } catch (error) {
+              ui.toast(error.message || "Could not delete this item.", "error");
+              button.disabled = false;
+            }
+          });
+        });
+      }
+
+      bindDelete("[data-delete-course]", "data-delete-course", function (id) {
+        return api.deleteCourse(id);
+      }, "Delete course", "Resources keep their files but lose this course link.");
+      bindDelete("[data-delete-resource]", "data-delete-resource", function (id) {
+        return api.deleteResource(id);
+      }, "Delete resource", "The resource and its links will be removed.");
+      bindDelete("[data-delete-live]", "data-delete-live", function (id) {
+        return api.deleteLiveSession(id);
+      }, "Delete live session", "The scheduled or ended session will be removed.");
+      bindDelete("[data-delete-exam]", "data-delete-exam", function (id) {
+        return api.deleteExam(id);
+      }, "Delete exam", "Questions, attempts, answers and proctor events for this exam will also be removed.");
+      bindDelete("[data-delete-assignment]", "data-delete-assignment", function (id) {
+        return api.deleteAssignment(id);
+      }, "Delete assignment", "Student submissions for this assignment will also be removed.");
+
+  
       const courseForm = root.querySelector("#course-form");
       if (courseForm) {
         courseForm.addEventListener("submit", async function (event) {
@@ -380,7 +428,7 @@
         });
       }
 
-      /* ----------------------------------------------------------- resource */
+     
       const resourceForm = root.querySelector("#resource-form");
       if (resourceForm) {
         resourceForm.addEventListener("submit", async function (event) {
@@ -428,7 +476,7 @@
         });
       }
 
-      /* --------------------------------------------------------------- live */
+  
       const liveForm = root.querySelector("#live-form");
       if (liveForm) {
         liveForm.addEventListener("submit", async function (event) {
@@ -488,7 +536,7 @@
         });
       });
 
-      /* --------------------------------------------------------------- exam */
+   
       const examForm = root.querySelector("#exam-form");
       if (examForm) {
         const list = root.querySelector("#question-list");
@@ -619,7 +667,7 @@
         });
       }
 
-      /* --------------------------------------------------------- assignment */
+  
       const assignmentForm = root.querySelector("#manage-assignment-form");
       if (assignmentForm) {
         assignmentForm.addEventListener("submit", async function (event) {

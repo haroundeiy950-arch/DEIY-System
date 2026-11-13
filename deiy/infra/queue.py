@@ -39,14 +39,14 @@ class JobQueue:
         self._stop = threading.Event()
         self._lock = threading.Lock()
 
-    # ------------------------------------------------------------- registry
+   
     def register(self, kind: str, handler: JobHandler) -> None:
         self._handlers[kind] = handler
 
     def handlers(self) -> list[str]:
         return sorted(self._handlers)
 
-    # ---------------------------------------------------------------- enqueue
+   
     def enqueue(self, kind: str, payload: dict | None = None, *, delay_seconds: float = 0.0) -> str:
         if kind not in self._handlers:
             raise ValueError(f"No handler registered for job kind '{kind}'")
@@ -64,7 +64,7 @@ class JobQueue:
         finally:
             session.close()
 
-    # ----------------------------------------------------------------- worker
+    
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -88,7 +88,7 @@ class JobQueue:
             if not processed:
                 self._stop.wait(self.poll_interval)
 
-    # --------------------------------------------------------------- draining
+    
     def drain(self, *, limit: int = 100) -> int:
         """Process due jobs synchronously (also used by tests)."""
 
@@ -154,7 +154,7 @@ class JobQueue:
         finally:
             session.close()
 
-    # ---------------------------------------------------------------- helpers
+   
     def pending(self) -> int:
         session = self.session_factory()
         try:

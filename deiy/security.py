@@ -21,7 +21,7 @@ PBKDF2_ITERATIONS = 260_000
 
 ROLES = ("admin", "teacher", "student", "proctor")
 
-# Capability matrix backing the RBAC section of the specification.
+
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "platform.manage",

@@ -96,6 +96,7 @@ def create_app(settings: Settings | None = None, container: AppContainer | None 
             raise NotFound("Media object not found.")
         return FileResponse(path)
 
+   
     if _WEB_DIR.is_dir() and (_WEB_DIR / "index.html").is_file():
         app.mount(
             "/ui",
@@ -103,10 +104,30 @@ def create_app(settings: Settings | None = None, container: AppContainer | None 
             name="web-ui",
         )
 
+        if (_WEB_DIR / "css").is_dir():
+            app.mount(
+                "/css",
+                StaticFiles(directory=str(_WEB_DIR / "css")),
+                name="web-css",
+            )
+
+        if (_WEB_DIR / "js").is_dir():
+            app.mount(
+                "/js",
+                StaticFiles(directory=str(_WEB_DIR / "js")),
+                name="web-js",
+            )
+
         @app.get("/app", include_in_schema=False)
         def web_app() -> RedirectResponse:
             return RedirectResponse("/ui/")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return FileResponse(
+            _WEB_DIR / "favicon.svg",
+            media_type="image/svg+xml",
+        )
     return app
 
 

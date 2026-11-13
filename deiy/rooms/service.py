@@ -41,7 +41,7 @@ class RoomService:
         self.queue = queue
         self.events = events
 
-    # ------------------------------------------------------------------ create
+    
     def create_room(self, host: User, data: dict) -> dict:
         title = (data.get("title") or "").strip()
         if not title:
@@ -86,7 +86,7 @@ class RoomService:
                 for room in rooms
             ]
 
-    # -------------------------------------------------------------------- join
+    
     def join(
         self,
         room_id: str,
@@ -184,7 +184,7 @@ class RoomService:
             self.end_room(room_id, actor=None)
             raise Conflict("This room reached its maximum duration and was closed.", code="room_closed")
 
-        # Auto-close job, scheduled once when the room starts.
+        
         if first_join:
             delay = max(0.0, (started + timedelta(minutes=max_minutes) - utcnow()).total_seconds())
             self.queue.enqueue("room.autoclose", {"room_id": room_id}, delay_seconds=delay)
@@ -211,6 +211,31 @@ class RoomService:
         self.events.publish("room.participant.left", {"room_id": room_id, "user_id": user.id})
         return {"message": "Left the room.", "room_id": room_id}
 
+    def delete_room(self, room_id: str, *, actor: User) -> dict:
+        with self.db.session() as session:
+            room = session.get(StudyRoom, room_id)
+            if room is None:
+                raise NotFound("Study room not found.")
+            if actor.role != "admin" and actor.id != room.host_id:
+                raise Forbidden("Only the host or an admin can delete this room.")
+            payload = room_public(room, participant_count=self._active_count(session, room_id))
+            session.query(RoomParticipant).filter(RoomParticipant.room_id == room_id).delete(
+                synchronize_session=False
+            )
+            session.query(RoomSummary).filter(RoomSummary.room_id == room_id).delete(
+                synchronize_session=False
+            )
+            record_audit(
+                session,
+                action="study_room.deleted",
+                actor_id=actor.id,
+                target=room.id,
+                meta={"title": room.title},
+            )
+            session.delete(room)
+            session.flush()
+            return payload
+
     def get_room(self, room_id: str, user: User) -> dict:
         with self.db.session() as session:
             room = session.get(StudyRoom, room_id)
@@ -232,7 +257,7 @@ class RoomService:
                 "is_participant": any(p["user_id"] == user.id for p in participants),
             }
 
-    # --------------------------------------------------------------------- end
+    
     def end_room(self, room_id: str, *, actor: User | None = None, transcript_hint: str | None = None) -> dict:
         with self.db.session() as session:
             room = session.get(StudyRoom, room_id)
@@ -283,7 +308,7 @@ class RoomService:
                 "message": "Room ended. AI summary queued for delivery.",
             }
 
-        # Resource optimisation queue: summarisation happens off the request path.
+        
         self.queue.enqueue(
             "room.summarize",
             {
@@ -301,7 +326,7 @@ class RoomService:
     def auto_close(self, payload: dict) -> None:
         self.end_room(payload["room_id"], actor=None)
 
-    # ----------------------------------------------------------------- summary
+
     def process_summary(self, payload: dict) -> None:
         room_id = payload["room_id"]
         with self.db.session() as session:
@@ -408,7 +433,7 @@ class RoomService:
             raise NotFound("No summary has been requested for this room.")
         return summary_public(summary, include_transcript=True)
 
-    # ------------------------------------------------------------------ helpers
+  
     @staticmethod
     def _active_count(session, room_id: str) -> int:
         return len(

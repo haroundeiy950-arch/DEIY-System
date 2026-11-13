@@ -1,7 +1,3 @@
-/* ==========================================================================
-   DEIY admin console: applications, users & roles, runtime configuration,
-   AI usage/cost, audit trail and platform metrics.
-   ========================================================================== */
 (function () {
   "use strict";
 
@@ -16,6 +12,7 @@
     { id: "users", label: "Users & roles" },
     { id: "config", label: "Configuration" },
     { id: "ai", label: "AI usage" },
+    { id: "database", label: "Database" },
     { id: "audit", label: "Audit log" }
   ];
 
@@ -69,7 +66,6 @@
       '<span class="tiny muted">risk ' + ui.esc(Number(review.risk_score || 0).toFixed(0)) + "/100</span>";
   }
 
-  /* ------------------------------------------------------------------ overview */
   async function overviewPanel() {
     let metrics = null;
     let usage = null;
@@ -138,7 +134,6 @@
     );
   }
 
-  /* -------------------------------------------------------------- applications */
   function applicationCard(user) {
     const review = user.ai_review || {};
     const flags = review.flags || [];
@@ -206,7 +201,7 @@
     );
   }
 
-  /* -------------------------------------------------------------- users & roles */
+ 
   async function usersPanel(query) {
     const role = query.get("role") || "";
     const status = query.get("status") || "";
@@ -280,7 +275,6 @@
     );
   }
 
-  /* --------------------------------------------------------------- configuration */
   function valueFor(spec, value) {
     const type = String(spec.type || "").toLowerCase();
     if (type === "bool") {
@@ -328,7 +322,6 @@
     );
   }
 
-  /* -------------------------------------------------------------------- AI usage */
   async function aiPanel() {
     let data;
     try {
@@ -363,7 +356,40 @@
     );
   }
 
-  /* ------------------------------------------------------------------- audit log */
+  async function databasePanel() {
+    let data;
+    try {
+      data = await api.adminDatabase();
+    } catch (error) {
+      return ui.errorPanel(error, "Try again");
+    }
+    const tables = data.tables || [];
+    return (
+      ui.alert("The database is created and updated automatically when the application starts. " +
+        "Download a consistent snapshot before upgrades or to keep an offline backup.", "info") +
+      '<div class="grid-4" style="margin:1rem 0">' +
+      '<div class="stat-card accent"><span class="stat-label">Engine</span><span class="stat-value">' +
+      ui.esc(ui.titleCase(data.dialect || "sqlite")) + "</span><span class=\"stat-note\">Database engine</span></div>" +
+      '<div class="stat-card"><span class="stat-label">Tables</span><span class="stat-value">' +
+      ui.esc(data.table_count || tables.length) + "</span><span class=\"stat-note\">Installed tables</span></div>" +
+      '<div class="stat-card"><span class="stat-label">Rows</span><span class="stat-value">' +
+      ui.esc(data.total_rows || 0) + "</span><span class=\"stat-note\">Across every table</span></div>" +
+      '<div class="stat-card"><span class="stat-label">Status</span><span class="stat-value">Ready</span>' +
+      '<span class="stat-note">Connection healthy</span></div></div>' +
+      '<div class="row" style="margin-bottom:1rem"><button class="btn btn-primary" type="button" ' +
+      'id="download-database">' + ui.icon("download") + " Download database backup</button>" +
+      '<button class="btn btn-ghost" type="button" id="refresh-database">Refresh counts</button></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>Table</th><th>Rows</th></tr></thead><tbody>' +
+      (tables.length
+        ? tables.map(function (row) {
+            return "<tr><td class=\"mono small\">" + ui.esc(row.table) + "</td><td>" +
+              ui.esc(row.rows) + "</td></tr>";
+          }).join("")
+        : '<tr><td colspan="2"><p class="small muted">No tables found.</p></td></tr>') +
+      "</tbody></table></div>"
+    );
+  }
+
   async function auditPanel() {
     let data;
     try {
@@ -394,7 +420,7 @@
     );
   }
 
-  /* ----------------------------------------------------------------------- page */
+
   pages.admin = {
     app: true,
     title: "Administration",
@@ -409,6 +435,7 @@
       else if (tab === "users") body = await usersPanel(ctx.query);
       else if (tab === "config") body = await configPanel();
       else if (tab === "ai") body = await aiPanel();
+      else if (tab === "database") body = await databasePanel();
       else if (tab === "audit") body = await auditPanel();
       else body = await overviewPanel();
 
@@ -441,6 +468,22 @@
       if (refresh) refresh.addEventListener("click", function () { DEIY.rerender(); });
       const refreshAudit = root.querySelector("#refresh-audit");
       if (refreshAudit) refreshAudit.addEventListener("click", function () { DEIY.rerender(); });
+      const refreshDatabase = root.querySelector("#refresh-database");
+      if (refreshDatabase) refreshDatabase.addEventListener("click", function () { DEIY.rerender(); });
+      const downloadDatabase = root.querySelector("#download-database");
+      if (downloadDatabase) {
+        downloadDatabase.addEventListener("click", async function () {
+          downloadDatabase.disabled = true;
+          try {
+            await api.adminDatabaseDownload();
+            ui.toast("Database backup downloaded.", "success");
+          } catch (error) {
+            ui.toast(error.message || "Could not download the database.", "error");
+          } finally {
+            downloadDatabase.disabled = false;
+          }
+        });
+      }
 
       root.querySelectorAll("[data-approve]").forEach(function (button) {
         button.addEventListener("click", async function () {
@@ -753,7 +796,7 @@
                   DEIY.rerender();
                 } catch (error) {
                   errorBox.hidden = false;
-                  errorBox.innerHTML = ui.alert(error.message || "Could not create the account.", "error");
+                  errorBox.innerHTML= ui.alert(error.message || "Could not create the account.", "error");
                   submit.disabled = false;
                 }
               });

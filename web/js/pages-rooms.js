@@ -1,7 +1,4 @@
-/* ==========================================================================
-   DEIY micro study rooms: 10-15 capacity, academic-ID join, camera policy,
-   45-minute countdown and queued AI summaries.
-   ========================================================================== */
+
 (function () {
   "use strict";
 
@@ -19,7 +16,7 @@
     return html;
   }
 
-  function roomCard(room) {
+  function roomCard(room, canManage) {
     return (
       '<article class="room-card"><div class="row-between">' +
       ui.badge(room.status, ui.statusTone(room.status)) +
@@ -29,9 +26,15 @@
         ? "Closes " + ui.esc(ui.fmtRelative(room.ends_at))
         : "Created " + ui.esc(ui.fmtRelative(room.created_at))) + "</p>" +
       '<div class="room-capacity" aria-hidden="true">' + seats(room) + "</div>" +
-      '<a class="btn btn-sm btn-primary" href="#/app/rooms/' + encodeURIComponent(room.id) + '">' +
+      '<div class="row" style="gap:0.4rem"><a class="btn btn-sm btn-primary" href="#/app/rooms/' +
+      encodeURIComponent(room.id) + '">' +
       (room.status === "open" ? ui.icon("arrow") + " Join room" : ui.icon("info") + " View room") +
-      "</a></article>"
+      "</a>" +
+      (canManage
+        ? '<button class="btn btn-sm btn-danger" type="button" data-delete-room="' + ui.esc(room.id) +
+          '" data-name="' + ui.esc(room.title) + '">Delete</button>'
+        : "") +
+      "</div></article>"
     );
   }
 
@@ -67,7 +70,9 @@
         '<div class="stat-card"><span class="stat-label">Summary SLA</span><span class="stat-value">5–10m</span>' +
         '<span class="stat-note">AI delivery window</span></div></div>' +
         (rooms.length
-          ? '<div class="room-grid">' + rooms.map(roomCard).join("") + "</div>"
+          ? '<div class="room-grid">' + rooms.map(function (room) {
+              return roomCard(room, ctx.user.role === "admin" || room.host_id === ctx.user.id);
+            }).join("") + "</div>"
           : ui.emptyState({
               icon: "room",
               title: "No study rooms yet",
@@ -138,10 +143,30 @@
       root.querySelectorAll("[data-create-room]").forEach(function (button) {
         button.addEventListener("click", openCreate);
       });
+      root.querySelectorAll("[data-delete-room]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const id = button.getAttribute("data-delete-room");
+          const name = button.getAttribute("data-name") || "this room";
+          const ok = await ui.confirmDialog(
+            "Delete " + name + "? Participants, the room summary and its history will be removed.",
+            { title: "Delete study room", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          button.disabled = true;
+          try {
+            await api.deleteRoom(id);
+            ui.toast("Study room deleted.", "success");
+            DEIY.rerender();
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the room.", "error");
+            button.disabled = false;
+          }
+        });
+      });
     }
   };
 
-  /* ------------------------------------------------------------------ room view */
+
   pages.room = {
     app: true,
     title: "Study room",
@@ -203,7 +228,12 @@
         ui.pageHead(room.title, "Capacity " + room.capacity + " · " +
           (room.status === "open" ? "Closes " + ui.fmtRelative(room.ends_at) : "Closed " +
             ui.fmtDate(room.ends_at, true)),
-          '<a class="btn btn-ghost btn-sm" href="#/app/rooms">← Rooms</a>') +
+          '<div class="row">' +
+          (canEnd
+            ? '<button class="btn btn-danger btn-sm" type="button" data-delete-room="' +
+              ui.esc(room.id) + '" data-name="' + ui.esc(room.title) + '">Delete room</button>'
+            : "") +
+          '<a class="btn btn-ghost btn-sm" href="#/app/rooms">← Rooms</a></div>') +
         '<div class="grid-2" style="grid-template-columns:minmax(0,1.3fr) minmax(300px,0.7fr);align-items:start">' +
         '<div class="stack">' + joinPanel +
         '<div class="panel"><div class="panel-head"><h3>Participants</h3>' +
@@ -359,6 +389,27 @@
           } catch (error) {
             ui.toast(error.message || "Could not end the room.", "error");
             end.disabled = false;
+          }
+        });
+      }
+
+      const deleteRoom = root.querySelector("[data-delete-room]");
+      if (deleteRoom) {
+        deleteRoom.addEventListener("click", async function () {
+          const ok = await ui.confirmDialog(
+            "Delete this study room? Participants, the summary and its history will be removed.",
+            { title: "Delete study room", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          deleteRoom.disabled = true;
+          try {
+            await api.deleteRoom(roomId);
+            if (stream) stream.getTracks().forEach(function (track) { track.stop(); });
+            ui.toast("Study room deleted.", "success");
+            DEIY.go("#/app/rooms");
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the room.", "error");
+            deleteRoom.disabled = false;
           }
         });
       }

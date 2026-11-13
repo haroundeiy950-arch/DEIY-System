@@ -75,7 +75,7 @@ class ConfigService:
         self.settings = settings
         self.overrides: set[str] = set()
 
-    # ------------------------------------------------------------------ read
+   
     def values(self) -> dict[str, Any]:
         return {name: getattr(self.settings, name) for name in EDITABLE_SETTINGS}
 
@@ -89,7 +89,7 @@ class ConfigService:
             "overrides": sorted(self.overrides),
         }
 
-    # ------------------------------------------------------------------ load
+  
     def load(self) -> dict[str, Any]:
         """Apply persisted overrides to the shared settings object."""
 
@@ -109,7 +109,7 @@ class ConfigService:
         self.overrides = set(applied)
         return applied
 
-    # ---------------------------------------------------------------- update
+   
     def update(self, changes: dict[str, Any], *, actor_id: str | None = None) -> dict:
         if not changes:
             raise ValidationFailed("Provide at least one configuration value.")
@@ -153,7 +153,8 @@ class ConfigService:
         self.overrides.update(validated)
         return validated
 
-    # -------------------------------------------------------------- helpers
+
+
     @staticmethod
     def _validate(key: str, value: Any, spec: SettingSpec) -> Any:
         if spec.kind is bool:

@@ -82,7 +82,7 @@ def _ensure_admin(container) -> User:
         ADMIN_PASSWORD,
         full_name="System Administrator Account",
     )
-    # ``ensure_admin`` returns a detached instance; reload for a stable object.
+   
     return container.auth.get_user(user.id)
 
 
@@ -307,8 +307,9 @@ def _ensure_exam(container, course: Course, teacher: User, student: User) -> Exa
     exam_id = payload["exam"]["id"]
     question_ids = [question["id"] for question in payload["questions"]]
 
-    # Demo a complete attempt so the gradebook, notifications and AI integrity
-    # report have real data. Camera verification is mandatory, as in production.
+
+
+    
     container.exams.camera_check(exam_id, device_id="seed-webcam", stream_ok=True)
     attempt_payload = container.exams.start_attempt(
         student,

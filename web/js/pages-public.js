@@ -199,6 +199,23 @@
           .join("") +
         "</div></div></section>" +
 
+        '<section class="section"><div class="container">' +
+        '<div class="admissions-banner"><div><span class="eyebrow">Admissions open</span>' +
+        "<h2>Ready to join DEIY?</h2>" +
+        "<p>Apply online in about five minutes. Choose from " + (guide.programs || FALLBACK_PROGRAMS).length +
+        " programs, verify your email and receive your academic ID after review.</p>" +
+        '<div class="row" style="margin-top:0.9rem">' +
+        '<a class="btn btn-amber" href="#/apply">' + ui.icon("arrow") + " Apply now</a>" +
+        '<a class="btn btn-light" href="#/admissions">Admissions &amp; requirements</a>' +
+        '<a class="btn btn-light" href="#/verify">Check your application</a></div></div>' +
+        '<div class="admissions-facts">' +
+        '<div class="admissions-fact"><strong>Free</strong><span>Application fee</span></div>' +
+        '<div class="admissions-fact"><strong>' + ui.esc(guide.minimum_age || 15) +
+        '</strong><span>Minimum age</span></div>' +
+        '<div class="admissions-fact"><strong>1–2 days</strong><span>Review time</span></div>' +
+        '<div class="admissions-fact"><strong>Online</strong><span>Study mode</span></div>' +
+        "</div></div></div></section>" +
+
         '<section class="section section-alt"><div class="container">' +
         '<div class="section-head"><span class="eyebrow">Applying is simple</span>' +
         "<h2>No jargon. No dead ends.</h2>" +
@@ -375,7 +392,8 @@
         "</div></div></section>"
       );
     },
-    after: function (root) {
+    after: function (root, ctx) {
+      const guide = guideFor(ctx);
       const form = root.querySelector("#apply-form");
       if (!form) return;
       const panes = Array.from(form.querySelectorAll("[data-step]"));
@@ -474,10 +492,6 @@
           }
           if (!phoneValid(data.father_phone_number)) {
             ui.toast("Enter a valid father/guardian phone number (7-15 digits).", "error");
-            return;
-          }
-          if (!data.photo) {
-            ui.toast("Add a photo by uploading a file or pasting an image URL.", "error");
             return;
           }
           renderReview();
@@ -581,6 +595,10 @@
           showError("Please confirm that your information is accurate.");
           return;
         }
+        if (!data.photo) {
+          showError("Add a photo by uploading a file or pasting an image URL before submitting your application.");
+          return;
+        }
         const button = root.querySelector("#apply-submit");
         button.disabled = true;
         button.textContent = "Submitting…";
@@ -631,7 +649,7 @@
     );
   }
 
-  /* ------------------------------------------------------------------- verify */
+
   pages.verify = {
     public: true,
     title: "Verify your email",
@@ -766,7 +784,7 @@
     }
   };
 
-  /* -------------------------------------------------------------------- login */
+
   pages.login = {
     public: true,
     title: "Sign in",
@@ -889,7 +907,109 @@
     }
   };
 
-  /* -------------------------------------------------------------------- guide */
+
+  pages.admissions = {
+    public: true,
+    chrome: true,
+    title: "Admissions",
+    render: async function (ctx) {
+      const guide = guideFor(ctx);
+      const programs = guide.programs || FALLBACK_PROGRAMS;
+      const steps = guide.steps || FALLBACK_GUIDE.steps;
+      const requirements = (guide.requirements || []).length
+        ? guide.requirements
+        : [
+            { label: "Full name", detail: "Four parts: first, second, third and family name" },
+            { label: "Email address", detail: "Used for verification and approval messages" },
+            { label: "Password", detail: "At least 8 characters with upper case, lower case and a number" },
+            { label: "Photo", detail: "Clear, front-facing JPG, PNG or WebP under 5 MB" },
+            { label: "Personal details", detail: "Program, nationality, date of birth, country and phone numbers" },
+            { label: "Minimum age", detail: (guide.minimum_age || 15) + " years" }
+          ];
+      return (
+        '<section class="hero hero-compact"><div class="container">' +
+        '<div><span class="eyebrow">Admissions</span>' +
+        "<h1>Your place at DEIY<br /><em>starts here.</em></h1>" +
+        '<p class="hero-lead">Admissions are open. Apply online in about five minutes, verify your email and ' +
+        "track your application through to your academic ID. The AI guide is available before you sign in.</p>" +
+        '<div class="hero-actions">' +
+        '<a class="btn btn-amber" href="#/apply">' + ui.icon("arrow") + " Apply now</a>" +
+        '<a class="btn btn-light" href="#/verify">Check your application</a>' +
+        '<a class="btn btn-light" href="#/guide">Application guide</a></div>' +
+        '<div class="hero-stats">' +
+        '<div class="hero-stat"><strong>' + programs.length + '</strong><span>Programs available</span></div>' +
+        '<div class="hero-stat"><strong>1–2 days</strong><span>Typical review time</span></div>' +
+        '<div class="hero-stat"><strong>24/7</strong><span>AI admissions help</span></div>' +
+        "</div></div>" +
+        '<aside class="journey-card"><h2>Admissions at a glance</h2>' +
+        "<p>Everything happens online. No paper forms and no campus visit required.</p>" +
+        '<div class="info-list">' +
+        '<div class="info-item"><span>Status</span><strong>Open</strong></div>' +
+        '<div class="info-item"><span>Application fee</span><strong>Free</strong></div>' +
+        '<div class="info-item"><span>Study mode</span><strong>Online</strong></div>' +
+        '<div class="info-item"><span>Minimum age</span><strong>' + ui.esc(guide.minimum_age || 15) +
+        " years</strong></div></div>" +
+        '<a class="btn btn-primary btn-block" href="#/apply" style="margin-top:1rem">Start your application</a>' +
+        "</aside></div></section>" +
+
+        '<section class="section"><div class="container">' +
+        '<div class="section-head center"><span class="eyebrow">Programs</span>' +
+        "<h2>Choose a program of study</h2>" +
+        "<p>Select one program in the application. You can discuss a change with admissions after approval.</p></div>" +
+        '<div class="feature-grid">' +
+        programs.map(function (program) {
+          return '<article class="feature-card"><div class="feature-icon">' + ui.icon("book") +
+            "</div><h3>" + ui.esc(program.name) + "</h3><p>" +
+            ui.esc(program.code) + " · Undergraduate and foundation entry</p>" +
+            '<a class="feature-link" href="#/apply">Apply for ' + ui.esc(program.name) + " →</a></article>";
+        }).join("") +
+        "</div></div></section>" +
+
+        '<section class="section section-alt"><div class="container">' +
+        '<div class="section-head"><span class="eyebrow">Entry requirements</span>' +
+        "<h2>What you need to apply</h2>" +
+        "<p>Prepare these details before you start. Nothing needs to be uploaded except your photo.</p></div>" +
+        '<div class="grid-2" style="align-items:start;gap:2rem">' +
+        '<div class="panel stack"><h3>Requirements</h3><div class="info-list">' +
+        requirements.map(function (item) {
+          return '<div class="info-item"><span>' + ui.esc(item.label) + "</span><strong>" +
+            ui.esc(item.detail) + "</strong></div>";
+        }).join("") +
+        '</div></div>' +
+        '<div class="panel stack"><h3>How your application is reviewed</h3>' +
+        steps.map(function (step, index) {
+          return '<div class="timeline-item"><span class="timeline-dot">' + (index + 1) + "</span>" +
+            '<div><strong>' + ui.esc(step.title) + '</strong><p class="small muted">' +
+            ui.esc(step.description) + "</p></div></div>";
+        }).join("") +
+        '<a class="btn btn-primary" href="#/apply">Begin step 1</a></div></div></div></section>' +
+
+        '<section class="section"><div class="container">' +
+        '<div class="grid-2" style="align-items:start;gap:2rem">' +
+        '<div class="panel stack"><h3>After you apply</h3>' +
+        '<div class="info-list">' +
+        '<div class="info-item"><span>Verification code</span><strong>6 digits · valid ' +
+        ui.esc(guide.otp_ttl_minutes || 10) + " minutes</strong></div>" +
+        '<div class="info-item"><span>Application status</span><strong>Pending approval after verification</strong></div>' +
+        '<div class="info-item"><span>Decision</span><strong>Usually 1–2 working days</strong></div>' +
+        '<div class="info-item"><span>On approval</span><strong>Academic ID issued by email</strong></div>' +
+        '<div class="info-item"><span>Next step</span><strong>Sign in and open your dashboard</strong></div></div>' +
+        '<div class="row" style="margin-top:0.5rem"><a class="btn btn-ghost btn-sm" href="#/verify">Verify email</a>' +
+        '<a class="btn btn-ghost btn-sm" href="#/login">Sign in</a></div></div>' +
+        '<div class="panel stack"><h3>Questions before you apply?</h3>' +
+        "<p class=\"small muted\">Ask the AI guide about name format, photos, OTP codes, approval times or " +
+        "technical problems. If it cannot help, it can open a support ticket after you sign in.</p>" +
+        '<div class="row"><button class="btn btn-primary" type="button" ' +
+        'data-assistant="How do I apply for admission?">' + ui.icon("spark") + " Ask the AI guide</button>" +
+        '<a class="btn btn-ghost" href="#/guide">Read the full guide</a></div>' +
+        '<div class="divider"></div><h3>Need this page later?</h3>' +
+        '<p class="small muted">Admissions is always available from the home page, the public menu and the footer.</p>' +
+        '<a class="btn btn-ghost btn-sm" href="#/">← Back to home</a></div></div></div></section>'
+      );
+    }
+  };
+
+
   pages.guide = {
     public: true,
     chrome: true,

@@ -17,9 +17,9 @@ def iso(minutes: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
 
 
-# ---------------------------------------------------------------------------
-# 1. Onboarding, registration and access control
-# ---------------------------------------------------------------------------
+
+
+
 def test_onboarding_rejects_incomplete_name(client):
     response = client.post(
         "/auth/register",
@@ -41,7 +41,7 @@ def test_onboarding_rejects_incomplete_name(client):
 
 
 def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
-    # Registration -> pending email, AI review attached, welcome mail sent.
+   
     registration = client.post(
         "/auth/register",
         json={
@@ -63,14 +63,14 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
     assert re.fullmatch(r"\d{6}", body["dev_code"])
     assert body["user"]["ai_review"]["recommendation"] in {"approve", "review"}
 
-    # Login is blocked before verification.
+    
     blocked = client.post(
         "/auth/login", json={"email": "new.student@deiy.test", "password": "StrongPass1"}
     )
     assert blocked.status_code == 403
     assert blocked.json()["error"] == "email_not_verified"
 
-    # Verify via OTP -> pending approval.
+    
     verified = client.post(
         "/auth/verify-email",
         json={"email": "new.student@deiy.test", "code": body["dev_code"]},
@@ -84,7 +84,7 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
     assert pending.status_code == 403
     assert pending.json()["error"] == "pending_approval"
 
-    # Admin reviews the application and approves it.
+   
     applications = client.get("/admin/applications", headers=auth(admin_token["token"]))
     assert applications.status_code == 200
     assert any(
@@ -101,7 +101,7 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
     assert user["status"] == "active"
     assert re.fullmatch(r"DEIY-\d{4}-\d{6}", user["academic_id"])
 
-    # Academic ID is emailed alongside the activation link.
+   
     with container.db.session() as session:
         from deiy.models import OutboxEmail
 
@@ -110,7 +110,7 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
         ).scalars().all()
     assert any(user["academic_id"] in email.body for email in emails)
 
-    # Login works and /me returns the identity.
+    
     login = client.post(
         "/auth/login", json={"email": "new.student@deiy.test", "password": "StrongPass1"}
     )
@@ -120,7 +120,7 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
     assert me.status_code == 200
     assert me.json()["user"]["academic_id"] == user["academic_id"]
 
-    # RBAC: a student cannot author content.
+    
     forbidden = client.post(
         "/library/courses",
         headers=auth(token),
@@ -128,16 +128,16 @@ def test_full_onboarding_and_rbac(client, container, admin_token, onboard):
     )
     assert forbidden.status_code == 403
 
-    # AI usage was metered for the registration review.
+    
     usage = client.get("/admin/ai-usage", headers=auth(admin_token["token"]))
     assert usage.status_code == 200
     tasks = {row["task"] for row in usage.json()["breakdown"]}
     assert "registration_review" in tasks
 
 
-# ---------------------------------------------------------------------------
-# 2. Content management and digital library
-# ---------------------------------------------------------------------------
+
+
+
 def test_library_search_watermark_upload_and_live_archive(
     client, container, teacher, onboard
 ):
@@ -200,7 +200,7 @@ def test_library_search_watermark_upload_and_live_archive(
     assert video_id in ids
     assert search.json()["results"][0]["match"]["score"] > 0
 
-    # Dynamic watermark contains the student's name + academic ID.
+    
     access = client.get(
         f"/library/resources/{video_id}/access", headers=student["headers"]
     )
@@ -212,7 +212,7 @@ def test_library_search_watermark_upload_and_live_archive(
     variants = {item["resolution"] for item in access_body["variants"]}
     assert {"144p", "360p", "720p", "audio"} <= variants
 
-    # Download variant + watermark manifest.
+   
     download = client.get(
         f"/library/resources/{video_id}/download",
         params={"variant": "720p"},
@@ -227,7 +227,7 @@ def test_library_search_watermark_upload_and_live_archive(
     )
     assert invalid.status_code == 422
 
-    # Uploaded object is served through a signed media URL.
+    
     pdf_download = client.get(
         f"/library/resources/{pdf_id}/download", headers=student["headers"]
     )
@@ -239,7 +239,7 @@ def test_library_search_watermark_upload_and_live_archive(
     tampered = client.get(urlparse(url).path)
     assert tampered.status_code in {401, 422}
 
-    # Interactive resource linking inside a lecture/room/exam.
+    
     link = client.post(
         f"/library/resources/{pdf_id}/links",
         headers=auth(headers),
@@ -254,7 +254,7 @@ def test_library_search_watermark_upload_and_live_archive(
     assert links.status_code == 200
     assert links.json()["links"][0]["resource"]["id"] == pdf_id
 
-    # Live stream auto-archive.
+   
     session = client.post(
         "/library/live-sessions",
         headers=auth(headers),
@@ -275,9 +275,9 @@ def test_library_search_watermark_upload_and_live_archive(
         assert any(job.kind == "media.archive_recording" and job.status == "done" for job in jobs)
 
 
-# ---------------------------------------------------------------------------
-# 3. Smart proctored exams
-# ---------------------------------------------------------------------------
+
+
+
 def test_proctored_exam_camera_autosave_submit_and_integrity(
     client, container, teacher, onboard
 ):
@@ -311,7 +311,7 @@ def test_proctored_exam_camera_autosave_submit_and_integrity(
     exam_id = exam.json()["exam"]["id"]
     question_ids = [item["id"] for item in exam.json()["questions"]]
 
-    # Camera is mandatory.
+    
     no_camera = client.post(
         f"/exams/{exam_id}/attempts",
         headers=student["headers"],
@@ -346,7 +346,7 @@ def test_proctored_exam_camera_autosave_submit_and_integrity(
     assert attempt["policy"]["tab_switching_blocked"] is True
     assert "answer_key" not in started.json()["questions"][0]
 
-    # Second-by-second offline autosave (idempotent replay).
+
     payload = {
         "client_seq": 5,
         "answers": [
@@ -381,7 +381,7 @@ def test_proctored_exam_camera_autosave_submit_and_integrity(
     assert stale.status_code == 200
     assert stale.json()["synced"] == []
 
-    # Anti-cheat events are recorded.
+   
     events = client.post(
         f"/exams/attempts/{attempt_id}/proctor-events",
         headers=student["headers"],
@@ -396,7 +396,7 @@ def test_proctored_exam_camera_autosave_submit_and_integrity(
     assert events.status_code == 201, events.text
     assert events.json()["recorded"] == 3
 
-    # Submission grades MCQ automatically and subjective answers with AI.
+   
     submitted = client.post(
         f"/exams/attempts/{attempt_id}/submit", headers=student["headers"]
     )
@@ -407,12 +407,12 @@ def test_proctored_exam_camera_autosave_submit_and_integrity(
     assert result["integrity"]["risk_score"] > 0
     assert result["integrity"]["recommendation"] in {"flag_for_review", "invalidate"}
 
-    # Teacher view exposes answer keys; student cannot read another attempt.
+  
     teacher_exam = client.get(f"/exams/{exam_id}", headers=auth(teacher["token"]))
     assert teacher_exam.status_code == 200
     assert "answer_key" in teacher_exam.json()["questions"][0]
 
-    # Deadline enforcement: move the deadline into the past, then read -> terminated.
+  
     with container.db.session() as db_session:
         row = db_session.get(ExamAttempt, attempt_id)
         row.status = "in_progress"
@@ -422,9 +422,9 @@ def test_proctored_exam_camera_autosave_submit_and_integrity(
     assert expired.json()["attempt"]["status"] == "terminated"
 
 
-# ---------------------------------------------------------------------------
-# 4. Micro study rooms + AI summary queue
-# ---------------------------------------------------------------------------
+
+
+
 def test_study_room_capacity_camera_and_ai_summary(client, container, onboard):
     host = onboard(email="room.host@deiy.test", full_name="Hodan Abdi Warsame Jama")
     academic_id = host["user"]["academic_id"]
@@ -499,9 +499,8 @@ def test_study_room_capacity_camera_and_ai_summary(client, container, onboard):
     assert any("Study room summary" in item["title"] for item in notifications.json()["notifications"])
 
 
-# ---------------------------------------------------------------------------
-# 5. Utilities, helpdesk, gradebook, calendar
-# ---------------------------------------------------------------------------
+
+
 def test_helpdesk_tickets_calendar_and_gradebook(client, container, teacher, onboard):
     student = onboard(email="utility.student@deiy.test")
 

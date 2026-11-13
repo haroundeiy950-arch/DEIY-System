@@ -55,7 +55,7 @@ class Database:
         )
 
     def create_all(self) -> None:
-        # Imported here so the models module can import ``Base`` without a cycle.
+       
         from deiy import models  # noqa: F401
 
         Base.metadata.create_all(self.engine)

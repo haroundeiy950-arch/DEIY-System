@@ -1,6 +1,4 @@
-/* ==========================================================================
-   DEIY utilities: gradebook, assignments, helpdesk and support tickets.
-   ========================================================================== */
+
 (function () {
   "use strict";
 
@@ -9,7 +7,7 @@
   const api = DEIY.api;
   const pages = (DEIY.pages = DEIY.pages || {});
 
-  /* ----------------------------------------------------------------- gradebook */
+
   pages.gradebook = {
     app: true,
     title: "Gradebook",
@@ -129,7 +127,7 @@
     }
   };
 
-  /* ---------------------------------------------------------------- assignments */
+
   pages.assignments = {
     app: true,
     title: "Assignments",
@@ -159,7 +157,9 @@
                   ? '<button class="btn btn-sm btn-primary" type="button" data-submit="' + ui.esc(item.id) +
                     '" data-title="' + ui.esc(item.title) + '">Submit work</button>'
                   : '<button class="btn btn-sm btn-ghost" type="button" data-submissions="' + ui.esc(item.id) +
-                    '" data-title="' + ui.esc(item.title) + '">Submissions</button>') +
+                    '" data-title="' + ui.esc(item.title) + '">Submissions</button>' +
+                    '<button class="btn btn-sm btn-danger" type="button" data-delete-assignment="' +
+                    ui.esc(item.id) + '" data-name="' + ui.esc(item.title) + '">Delete</button>') +
                 "</div></div>" +
                 (item.description ? '<p class="small" style="margin-top:0.5rem">' + ui.esc(item.description) +
                   "</p>" : "") + "</div>";
@@ -276,6 +276,25 @@
           openSubmissions(button.getAttribute("data-submissions"), button.getAttribute("data-title"));
         });
       });
+      root.querySelectorAll("[data-delete-assignment]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const name = button.getAttribute("data-name") || "this assignment";
+          const ok = await ui.confirmDialog(
+            "Delete " + name + "? Student submissions for this assignment will also be removed.",
+            { title: "Delete assignment", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          button.disabled = true;
+          try {
+            await api.deleteAssignment(button.getAttribute("data-delete-assignment"));
+            ui.toast("Assignment deleted.", "success");
+            DEIY.rerender();
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the assignment.", "error");
+            button.disabled = false;
+          }
+        });
+      });
 
       const newAssignment = root.querySelector("#new-assignment");
       if (newAssignment) {
@@ -324,7 +343,7 @@
     }
   };
 
-  /* ------------------------------------------------------------------- helpdesk */
+
   pages.help = {
     app: true,
     title: "Helpdesk",
@@ -372,7 +391,9 @@
                 ui.badge(ticket.status, ticket.status === "resolved" ? "success" : "amber") + " · " +
                 ui.esc(ui.fmtDate(ticket.created_at, true)) + "</span></div>" +
                 '<button class="btn btn-xs btn-ghost" type="button" data-ticket="' + ui.esc(ticket.id) +
-                '">Open</button></div>';
+                '">Open</button>' +
+                '<button class="btn btn-xs btn-danger" type="button" data-delete-ticket="' +
+                ui.esc(ticket.id) + '" data-name="' + ui.esc(ticket.subject) + '">Delete</button></div>';
             }).join("") + "</div>"
           : '<p class="small muted">No tickets yet. If the AI cannot solve a problem it can open one for you.</p>') +
         "</div></div>"
@@ -456,7 +477,9 @@
               ui.badge(ticket.status, ticket.status === "resolved" ? "success" : "amber") + " · " +
               ui.esc(ui.fmtDate(ticket.created_at, true)) + "</span></div>" +
               '<button class="btn btn-xs btn-ghost" type="button" data-ticket="' + ui.esc(ticket.id) +
-              '">Open</button></div>';
+              '">Open</button>' +
+              '<button class="btn btn-xs btn-danger" type="button" data-delete-ticket="' +
+              ui.esc(ticket.id) + '" data-name="' + ui.esc(ticket.subject) + '">Delete</button></div>';
           }).join("");
           if (list) {
             list.innerHTML = html;
@@ -525,6 +548,25 @@
       function bindTicketButtons() {
         root.querySelectorAll("[data-ticket]").forEach(function (button) {
           button.onclick = function () { openTicket(button.getAttribute("data-ticket")); };
+        });
+        root.querySelectorAll("[data-delete-ticket]").forEach(function (button) {
+          button.onclick = async function () {
+            const name = button.getAttribute("data-name") || "this ticket";
+            const ok = await ui.confirmDialog(
+              "Delete " + name + "? The ticket and all of its messages will be removed.",
+              { title: "Delete ticket", confirmLabel: "Delete", danger: true }
+            );
+            if (!ok) return;
+            button.disabled = true;
+            try {
+              await api.deleteTicket(button.getAttribute("data-delete-ticket"));
+              ui.toast("Ticket deleted.", "success");
+              refreshTickets();
+            } catch (error) {
+              ui.toast(error.message || "Could not delete the ticket.", "error");
+              button.disabled = false;
+            }
+          };
         });
       }
 

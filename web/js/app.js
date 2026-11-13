@@ -1,6 +1,3 @@
-/* ==========================================================================
-   DEIY application bootstrap, router, authentication and application shell.
-   ========================================================================== */
 (function () {
   "use strict";
 
@@ -30,6 +27,7 @@
 
   const ROUTES = {
     "/": "landing",
+    "/admissions": "admissions",
     "/apply": "apply",
     "/verify": "verify",
     "/login": "login",
@@ -91,6 +89,7 @@
         'aria-label="Open menu" aria-expanded="false">' + ui.icon("menu") + '</button>' +
       '<nav class="public-nav" aria-label="Public navigation">' +
         '<a href="#/">Home</a>' +
+        '<a href="#/admissions">Admissions</a>' +
         '<a href="#/guide">Guide</a>' +
         '<a href="#/apply">Apply</a>' +
         accountLink() +
@@ -103,6 +102,7 @@
     return '<footer class="public-footer"><div class="container">' +
       '<span>&copy; ' + new Date().getFullYear() + ' DEIY &middot; Learn without limits</span>' +
       '<div class="row">' +
+        '<a href="#/admissions">Admissions</a>' +
         '<a href="#/guide">Application guide</a>' +
         '<a href="#/apply">Apply</a>' +
         accountLink() +

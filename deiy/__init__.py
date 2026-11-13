@@ -29,7 +29,7 @@ __version__ = "1.0.0"
 __author__ = "DEIY Platform"
 __specification__ = "DEIY System Architecture Specification Document"
 
-# --------------------------------------------------------------------- core
+
 from deiy.ai import (
     AIEngine,
     GeminiClient,
@@ -89,12 +89,12 @@ from deiy.security import (
 from deiy.utilities import UtilitiesService, notification_public, ticket_public
 
 __all__ = [
-    # metadata
+    
     "__title__",
     "__version__",
     "__author__",
     "__specification__",
-    # application
+  
     "create_app",
     "get_app",
     "build_container",
@@ -104,7 +104,7 @@ __all__ = [
     "Database",
     "Base",
     "EventBus",
-    # errors
+   
     "AppError",
     "ValidationFailed",
     "Unauthorized",
@@ -113,7 +113,7 @@ __all__ = [
     "Conflict",
     "RateLimited",
     "DependencyUnavailable",
-    # security
+   
     "hash_password",
     "verify_password",
     "create_access_token",
@@ -121,13 +121,13 @@ __all__ = [
     "sign_token",
     "ROLES",
     "ROLE_PERMISSIONS",
-    # services
+    
     "AuthService",
     "LibraryService",
     "ExamService",
     "RoomService",
     "UtilitiesService",
-    # serializers
+   
     "user_public",
     "course_public",
     "resource_public",
@@ -139,7 +139,7 @@ __all__ = [
     "summary_public",
     "notification_public",
     "ticket_public",
-    # AI
+   
     "AIEngine",
     "Transcript",
     "SummaryReport",
@@ -152,7 +152,7 @@ __all__ = [
     "ResourceEnrichment",
     "WhisperTranscriber",
     "GeminiClient",
-    # infrastructure
+   
     "LocalStorage",
     "S3Storage",
     "MediaPipeline",
@@ -164,7 +164,7 @@ __all__ = [
     "SmtpMailer",
     "build_storage",
     "build_mailer",
-    # API helpers
+    
     "get_container",
     "get_current_user",
     "require_roles",

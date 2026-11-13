@@ -67,7 +67,7 @@ class AIEngine:
             except ValueError:
                 logger.warning("Gemini adapter could not be initialised")
 
-    # ------------------------------------------------------------------ health
+    
     def health(self) -> dict:
         return {
             "text_provider": "gemini" if self._gemini else "mock",
@@ -97,7 +97,7 @@ class AIEngine:
         self.degraded.add(task)
         logger.warning("AI task '%s' fell back to mock: %s", task, exc)
 
-    # ------------------------------------------------------------- transcribe
+    
     def transcribe(self, audio_uri: str, *, context: dict | None = None) -> Transcript:
         if self._whisper:
             try:
@@ -117,7 +117,7 @@ class AIEngine:
         self._record("transcribe", "mock", transcript.duration_seconds / 60, "audio_minutes", 0.0)
         return transcript
 
-    # -------------------------------------------------------------- summarize
+    
     def summarize_room(
         self, transcript: Transcript, *, context: dict | None = None
     ) -> SummaryReport:
@@ -163,7 +163,7 @@ class AIEngine:
         self._record("summarize", "mock", 0.0, "tokens", 0.0)
         return report
 
-    # --------------------------------------------------------- registration
+    
     def review_registration(self, profile: dict) -> RegistrationReview:
         if self._gemini:
             prompt = (
@@ -198,7 +198,7 @@ class AIEngine:
         self._record("registration_review", "mock", 0.0, "tokens", 0.0)
         return review
 
-    # -------------------------------------------------------------- integrity
+    
     def analyze_integrity(self, events: list[dict], *, attempt: dict | None = None) -> IntegrityReport:
         if self._gemini:
             prompt = (
@@ -233,7 +233,7 @@ class AIEngine:
         self._record("exam_integrity", "mock", 0.0, "tokens", 0.0)
         return report
 
-    # ----------------------------------------------------------------- search
+
     def rank_resources(self, query: str, documents: list[dict], *, limit: int = 20) -> list[SearchHit]:
         if self._gemini and documents:
             compact = [
@@ -280,7 +280,7 @@ class AIEngine:
         self._record("library_search", "mock", 0.0, "tokens", 0.0)
         return hits
 
-    # --------------------------------------------------------------- helpdesk
+    
     def helpdesk(self, question: str, *, context: dict | None = None) -> HelpdeskAnswer:
         if self._gemini:
             prompt = (
@@ -318,7 +318,7 @@ class AIEngine:
         self._record("helpdesk", "mock", 0.0, "tokens", 0.0)
         return result
 
-    # ------------------------------------------------------------------ grade
+    
     def grade_subjective(
         self, question: str, answer: str, *, max_points: float, rubric: str | None = None
     ) -> GradeResult:
@@ -352,7 +352,7 @@ class AIEngine:
         self._record("exam_grading", "mock", 0.0, "tokens", 0.0)
         return result
 
-    # --------------------------------------------------------------- insights
+    
     def student_insights(self, gradebook: dict) -> StudentInsight:
         if self._gemini:
             prompt = (
@@ -388,7 +388,7 @@ class AIEngine:
         self._record("student_insights", "mock", 0.0, "tokens", 0.0)
         return insight
 
-    # --------------------------------------------------------------- library
+    
     def enrich_resource(self, title: str, body: str, *, kind: str) -> ResourceEnrichment:
         if self._gemini:
             prompt = (

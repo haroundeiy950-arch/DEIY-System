@@ -16,7 +16,7 @@ from deiy.errors import Conflict, NotFound, ValidationFailed
 from deiy.events import EventBus
 from deiy.infra.storage import MediaPipeline
 from deiy.infra.watermark import WatermarkService
-from deiy.models import Course, LiveSession, Resource, ResourceLink
+from deiy.models import AttendanceRecord, Course, LiveSession, Resource, ResourceLink
 from deiy.utils import new_id, utcnow
 
 KINDS = {"video", "pdf", "epub", "image", "audio"}
@@ -44,7 +44,7 @@ class LibraryService:
         self.queue = queue
         self.events = events
 
-    # ------------------------------------------------------------------ courses
+    
     def create_course(self, data: dict, *, actor_id: str | None = None) -> Course:
         code = (data.get("code") or "").strip().upper()
         title = (data.get("title") or "").strip()
@@ -69,6 +69,80 @@ class LibraryService:
             session.flush()
             return course
 
+    def delete_course(self, course_id: str, *, actor_id: str | None = None) -> Course:
+        from deiy.models import Assignment, AttendanceRecord, Exam, StudyRoom
+
+        with self.db.session() as session:
+            course = session.get(Course, course_id)
+            if course is None:
+                raise NotFound("Course not found.")
+            for model in (Resource, LiveSession, Exam, StudyRoom, Assignment, AttendanceRecord):
+                session.query(model).filter(model.course_id == course_id).update(
+                    {model.course_id: None}, synchronize_session=False
+                )
+            record_audit(
+                session,
+                action="course.deleted",
+                actor_id=actor_id,
+                target=course.id,
+                meta={"code": course.code, "title": course.title},
+            )
+            session.delete(course)
+            session.flush()
+            return course
+
+    def delete_resource(self, resource_id: str, *, actor_id: str | None = None) -> Resource:
+        with self.db.session() as session:
+            resource = session.get(Resource, resource_id)
+            if resource is None:
+                raise NotFound("Resource not found.")
+            session.query(ResourceLink).filter(ResourceLink.resource_id == resource_id).delete(
+                synchronize_session=False
+            )
+            record_audit(
+                session,
+                action="resource.deleted",
+                actor_id=actor_id,
+                target=resource.id,
+                meta={"title": resource.title, "kind": resource.kind},
+            )
+            session.delete(resource)
+            session.flush()
+            storage_key = resource.storage_key
+        if storage_key:
+            try:
+                self.storage.delete(storage_key)
+            except Exception:  # pragma: no cover - storage cleanup is best effort
+                pass
+        return resource
+
+   
+    def delete_session(self, session_id: str, *, actor_id: str | None = None) -> LiveSession:
+        with self.db.session() as session:
+            row = session.get(LiveSession, session_id)
+            if row is None:
+                raise NotFound("Live session not found.")
+
+            # Preserve attendance records when deleting the live session.
+            session.query(AttendanceRecord).filter(
+                AttendanceRecord.session_id == session_id
+            ).update(
+                {AttendanceRecord.session_id: None},
+                synchronize_session=False,
+            )
+
+            record_audit(
+                session,
+                action="live_session.deleted",
+                actor_id=actor_id,
+                target=row.id,
+                meta={"title": row.title},
+            )
+            session.delete(row)
+            session.flush()
+            return row
+
+
     def list_courses(self, *, department: str | None = None, level: str | None = None) -> list[Course]:
         with self.db.session() as session:
             query = select(Course)
@@ -78,7 +152,7 @@ class LibraryService:
                 query = query.where(Course.level == level)
             return list(session.execute(query.order_by(Course.code)).scalars().all())
 
-    # ---------------------------------------------------------------- resources
+    
     def create_resource(self, data: dict, *, actor_id: str | None = None, upload=None) -> Resource:
         kind = (data.get("kind") or "").strip().lower()
         if kind not in KINDS:
@@ -204,7 +278,7 @@ class LibraryService:
             )
         return {"query": query, "count": len(results), "results": results}
 
-    # ------------------------------------------------------------------- access
+    
     def access(self, user, resource_id: str, *, kind: str = "view") -> dict:
         resource = self.get_resource(resource_id)
         user_dict = {
@@ -268,7 +342,7 @@ class LibraryService:
             "checksum_required": True,
         }
 
-    # -------------------------------------------------------------- resource links
+    
     def add_link(
         self, resource_id: str, *, target_type: str, target_id: str, label: str | None, actor_id: str | None
     ) -> ResourceLink:
@@ -323,7 +397,7 @@ class LibraryService:
             for link in links
         ]
 
-    # ------------------------------------------------------------- live sessions
+    
     def schedule_session(self, data: dict, *, actor_id: str | None = None) -> LiveSession:
         title = (data.get("title") or "").strip()
         scheduled_at = data.get("scheduled_at")
@@ -370,7 +444,7 @@ class LibraryService:
             session.flush()
             payload = {"session_id": row.id, "recording_key": row.recording_key, "title": row.title}
 
-        # Automatic recording archive: queued immediately when the stream ends.
+        
         self.queue.enqueue("media.archive_recording", payload)
         self.events.publish(
             "library.live_session.ended",
@@ -385,7 +459,7 @@ class LibraryService:
                 query = query.where(LiveSession.course_id == course_id)
             return list(session.execute(query.order_by(LiveSession.scheduled_at)).scalars().all())
 
-    # ------------------------------------------------------------------- jobs
+   
     def transcode_resource(self, payload: dict) -> None:
         resource = self.get_resource(payload["resource_id"])
         manifest = self.pipeline.transcode(resource.storage_key, title=resource.title)

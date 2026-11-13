@@ -22,7 +22,7 @@ router = APIRouter(prefix="/auth", tags=["1. Onboarding & Access"])
 admin_router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
-# --------------------------------------------------------------------- schemas
+
 class RegisterRequest(BaseModel):
     full_name: str = Field(..., examples=["Amina Yusuf Hassan Ali"])
     email: str = Field(..., examples=["amina@example.com"])
@@ -110,7 +110,7 @@ class ConfigUpdateRequest(BaseModel):
     )
 
 
-# ------------------------------------------------------------------ onboarding
+
 @router.get("/options")
 def admission_options(container=Depends(get_container)):
     """Programs, languages and sign-in providers offered by the platform."""
@@ -218,11 +218,11 @@ def change_password(
 
 @router.post("/logout", status_code=200)
 def logout(user: User = Depends(get_current_user)):
-    # Stateless JWT: the client discards the token. Kept for API symmetry.
+   
     return {"message": "Signed out.", "user_id": user.id}
 
 
-# ----------------------------------------------------------------- admin review
+
 @admin_router.get("/users")
 def list_users(
     status: str | None = Query(None, description="pending_approval, active, rejected..."),
@@ -343,6 +343,59 @@ def database_overview(
         "total_rows": total,
         "tables": tables,
     }
+
+
+@admin_router.get("/database/download")
+def download_database(
+    _: User = Depends(require_roles("admin")),
+    container=Depends(get_container),
+):
+    """Download a consistent SQLite snapshot (safe while WAL files are active)."""
+
+    import os
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    from sqlalchemy.engine import make_url
+    from starlette.background import BackgroundTask
+
+    url = make_url(container.db.url)
+    if url.get_backend_name() != "sqlite" or not url.database or url.database in {":memory:", ""}:
+        raise ValidationFailed(
+            "Database download is only available for file-based SQLite deployments."
+        )
+    source = Path(url.database).expanduser().resolve()
+    if not source.exists():
+        raise HTTPException(status_code=404, detail="The database file does not exist yet.")
+
+    fd, snapshot = tempfile.mkstemp(prefix="deiy-backup-", suffix=".db")
+    os.close(fd)
+    try:
+        source_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+        try:
+            target_conn = sqlite3.connect(snapshot)
+            try:
+                source_conn.backup(target_conn)
+            finally:
+                target_conn.close()
+        finally:
+            source_conn.close()
+    except Exception as error:  # pragma: no cover - filesystem/database failure
+        try:
+            os.unlink(snapshot)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail=f"Could not create the database backup: {error}")
+
+    filename = f"deiy-backup-{date.today().isoformat()}.db"
+    return FileResponse(
+        snapshot,
+        media_type="application/octet-stream",
+        filename=filename,
+        background=BackgroundTask(os.unlink, snapshot),
+    )
 
 
 @admin_router.post("/staff", status_code=201)

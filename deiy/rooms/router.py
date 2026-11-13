@@ -48,6 +48,15 @@ def list_rooms(
     return {"count": len(rooms), "rooms": rooms}
 
 
+@router.delete("/{room_id}")
+def delete_room(
+    room_id: str,
+    user: User = Depends(get_current_user),
+    container=Depends(get_container),
+):
+    return {"message": "Study room deleted.", "room": container.rooms.delete_room(room_id, actor=user)}
+
+
 @router.get("/{room_id}")
 def get_room(
     room_id: str,

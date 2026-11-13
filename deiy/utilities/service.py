@@ -50,7 +50,7 @@ class UtilitiesService:
         self.mailer = mailer
         self.events = events
 
-    # ------------------------------------------------------------ notifications
+    
     def notify(
         self,
         user_id: str,
@@ -108,7 +108,17 @@ class UtilitiesService:
             session.flush()
             return {"updated": len(rows)}
 
-    # ---------------------------------------------------------------- calendar
+   
+    def delete_notification(self, user_id: str, notification_id: str) -> dict:
+        with self.db.session() as session:
+            row = session.get(Notification, notification_id)
+            if row is None or row.user_id != user_id:
+                raise NotFound("Notification not found.")
+            payload = notification_public(row)
+            session.delete(row)
+            session.flush()
+            return payload
+
     def calendar(self, user: User) -> list[dict]:
         now = utcnow()
         events: list[dict] = []
@@ -163,7 +173,7 @@ class UtilitiesService:
         events.sort(key=lambda item: item["ends_at"] or item["starts_at"] or "")
         return events
 
-    # ---------------------------------------------------------------- gradebook
+   
     def gradebook(self, student_id: str, *, include_insights: bool = False) -> dict:
         with self.db.session() as session:
             attempts = session.execute(
@@ -225,7 +235,7 @@ class UtilitiesService:
             payload["ai_insights"] = self.ai.student_insights(payload).to_dict()
         return payload
 
-    # -------------------------------------------------------------- assignments
+ 
     def create_assignment(self, data: dict, *, actor_id: str | None = None) -> Assignment:
         title = (data.get("title") or "").strip()
         due_at = data.get("due_at")
@@ -245,6 +255,26 @@ class UtilitiesService:
             )
             session.flush()
             return assignment
+
+    def delete_assignment(self, assignment_id: str, *, actor_id: str | None = None) -> dict:
+        with self.db.session() as session:
+            assignment = session.get(Assignment, assignment_id)
+            if assignment is None:
+                raise NotFound("Assignment not found.")
+            payload = assignment_public(assignment)
+            session.query(AssignmentSubmission).filter(
+                AssignmentSubmission.assignment_id == assignment_id
+            ).delete(synchronize_session=False)
+            record_audit(
+                session,
+                action="assignment.deleted",
+                actor_id=actor_id,
+                target=assignment.id,
+                meta={"title": assignment.title},
+            )
+            session.delete(assignment)
+            session.flush()
+            return payload
 
     def list_assignments(self, *, course_id: str | None = None) -> list[Assignment]:
         with self.db.session() as session:
@@ -318,7 +348,7 @@ class UtilitiesService:
                 ).scalars().all()
             )
 
-    # --------------------------------------------------------------- attendance
+
     def record_attendance(self, data: dict, *, actor_id: str | None = None) -> AttendanceRecord:
         student_id = data.get("student_id")
         if not student_id:
@@ -341,7 +371,7 @@ class UtilitiesService:
             session.flush()
             return row
 
-    # ----------------------------------------------------------------- helpdesk
+ 
     def helpdesk(self, user: User, question: str) -> dict:
         if not (question or "").strip():
             raise ValidationFailed("Question is required.")
@@ -366,7 +396,7 @@ class UtilitiesService:
             "provider": answer.provider,
         }
 
-    # ------------------------------------------------------------------ tickets
+    
     def create_ticket(self, user_id: str, subject: str, body: str) -> SupportTicket:
         if not (subject or "").strip() or not (body or "").strip():
             raise ValidationFailed("Ticket subject and body are required.")
@@ -422,6 +452,24 @@ class UtilitiesService:
             session.flush()
             return ticket
 
+    def delete_ticket(self, ticket_id: str, actor: User) -> dict:
+        with self.db.session() as session:
+            ticket = session.get(SupportTicket, ticket_id)
+            if ticket is None:
+                raise NotFound("Ticket not found.")
+            if actor.role not in {"admin"} and ticket.user_id != actor.id:
+                raise Forbidden("You cannot delete this ticket.")
+            payload = ticket_public(ticket)
+            session.query(TicketMessage).filter(TicketMessage.ticket_id == ticket_id).delete(
+                synchronize_session=False
+            )
+            record_audit(
+                session, action="ticket.deleted", actor_id=actor.id, target=ticket_id
+            )
+            session.delete(ticket)
+            session.flush()
+            return payload
+
     def list_tickets(self, *, user_id: str | None = None, status: str | None = None) -> list[dict]:
         with self.db.session() as session:
             query = select(SupportTicket)
@@ -461,7 +509,7 @@ class UtilitiesService:
             ]
             return payload
 
-    # ------------------------------------------------------------------ metrics
+  
     def metrics(self) -> dict:
         with self.db.session() as session:
             users = session.execute(select(func.count(User.id))).scalar() or 0

@@ -98,8 +98,8 @@ class S3Storage:
 
     def __init__(self, settings: Settings) -> None:
         try:
-            import boto3  # type: ignore
-        except ImportError as exc:  # pragma: no cover - optional dependency
+            import boto3  
+        except ImportError as exc:  
             raise StorageError("boto3 is required for the S3/R2 storage backend") from exc
         self.bucket = settings.s3_bucket
         self.client = boto3.client(

@@ -1,9 +1,3 @@
-/* ==========================================================================
-   DEIY AI assistant widget
-   Works before sign-in (public /support/assistant) and after sign-in
-   (/utilities/helpdesk, which can open a support ticket). It is intentionally
-   dependency-free and mounted on every page.
-   ========================================================================== */
 (function () {
   "use strict";
 

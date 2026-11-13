@@ -1,6 +1,4 @@
-/* ==========================================================================
-   DEIY library: AI-ranked search, resource viewer, watermarked downloads.
-   ========================================================================== */
+
 (function () {
   "use strict";
 
@@ -15,7 +13,7 @@
     return { video: "video", pdf: "file", epub: "book", audio: "audio", image: "image" }[kind] || "file";
   }
 
-  function resourceCard(item) {
+  function resourceCard(item, canManage) {
     const match = item.match
       ? '<span class="match-note" title="' + ui.esc(item.match.reason || "") + '">AI match ' +
         Math.round((item.match.score || 0) * 100) + "%</span>"
@@ -34,8 +32,13 @@
       '<div class="resource-tags">' + (item.tags || []).slice(0, 4).map(function (tag) {
         return '<span class="tag">' + ui.esc(tag) + "</span>";
       }).join("") + "</div>" +
-      '<a class="btn btn-sm btn-primary" href="#/app/library/' + encodeURIComponent(item.id) + '">' +
-      ui.icon("play") + " Open resource</a></div></article>"
+      '<div class="row" style="gap:0.4rem"><a class="btn btn-sm btn-primary" href="#/app/library/' +
+      encodeURIComponent(item.id) + '">' + ui.icon("play") + " Open resource</a>" +
+      (canManage
+        ? '<button class="btn btn-sm btn-danger" type="button" data-delete-resource="' + ui.esc(item.id) +
+          '" data-name="' + ui.esc(item.title) + '">Delete</button>'
+        : "") +
+      "</div></div></article>"
     );
   }
 
@@ -102,7 +105,9 @@
         (params.q ? '<span class="badge badge-teal">' + ui.icon("spark") + " AI-ranked results</span>" : "") +
         "</div>" +
         (list.length
-          ? '<div class="resource-grid">' + list.map(resourceCard).join("") + "</div>"
+          ? '<div class="resource-grid">' + list.map(function (item) {
+              return resourceCard(item, ctx.user.role === "teacher" || ctx.user.role === "admin");
+            }).join("") + "</div>"
           : ui.emptyState({
               icon: "library",
               title: params.q ? "No resources matched" : "The library is empty",
@@ -122,21 +127,42 @@
     },
     after: function (root, ctx) {
       const form = root.querySelector("#library-search");
-      if (!form) return;
-      form.addEventListener("submit", function (event) {
-        event.preventDefault();
-        const text = (form.elements.namedItem("q").value || "").trim();
-        const course = form.elements.namedItem("course_id").value;
-        const query = new URLSearchParams();
-        if (text) query.set("q", text);
-        if (course) query.set("course_id", course);
-        if (ctx.query.get("kind")) query.set("kind", ctx.query.get("kind"));
-        DEIY.go("#/app/library" + (query.toString() ? "?" + query.toString() : ""));
+      if (form) {
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          const text = (form.elements.namedItem("q").value || "").trim();
+          const course = form.elements.namedItem("course_id").value;
+          const query = new URLSearchParams();
+          if (text) query.set("q", text);
+          if (course) query.set("course_id", course);
+          if (ctx.query.get("kind")) query.set("kind", ctx.query.get("kind"));
+          DEIY.go("#/app/library" + (query.toString() ? "?" + query.toString() : ""));
+        });
+      }
+      root.querySelectorAll("[data-delete-resource]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const id = button.getAttribute("data-delete-resource");
+          const name = button.getAttribute("data-name") || "this resource";
+          const ok = await ui.confirmDialog(
+            "Delete " + name + "? The resource and its links will be removed.",
+            { title: "Delete resource", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          button.disabled = true;
+          try {
+            await api.deleteResource(id);
+            ui.toast("Resource deleted.", "success");
+            DEIY.rerender();
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the resource.", "error");
+            button.disabled = false;
+          }
+        });
       });
     }
   };
 
-  /* -------------------------------------------------------------- resource view */
+
   pages.resource = {
     app: true,
     title: "Resource",
@@ -193,7 +219,12 @@
         ui.pageHead(resource.title, (resource.author || "DEIY library") + " · " +
           ui.titleCase(resource.kind) +
           (resource.duration_seconds ? " · " + ui.fmtDuration(resource.duration_seconds) : ""),
-          '<a class="btn btn-ghost btn-sm" href="#/app/library">← Library</a>') +
+          '<div class="row">' +
+          ((ctx.user.role === "teacher" || ctx.user.role === "admin")
+            ? '<button class="btn btn-danger btn-sm" type="button" data-delete-resource="' +
+              ui.esc(resource.id) + '" data-name="' + ui.esc(resource.title) + '">Delete</button>'
+            : "") +
+          '<a class="btn btn-ghost btn-sm" href="#/app/library">← Library</a></div>') +
         '<div class="grid-2" style="grid-template-columns:minmax(0,1.55fr) minmax(280px,0.45fr);align-items:start">' +
         '<div class="panel stack" style="padding:0.7rem">' +
         '<div class="media-frame" style="position:relative">' + viewer +
@@ -247,6 +278,25 @@
       );
     },
     after: function (root, ctx) {
+      root.querySelectorAll("[data-delete-resource]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const name = button.getAttribute("data-name") || "this resource";
+          const ok = await ui.confirmDialog(
+            "Delete " + name + "? The resource and its links will be removed.",
+            { title: "Delete resource", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          button.disabled = true;
+          try {
+            await api.deleteResource(button.getAttribute("data-delete-resource"));
+            ui.toast("Resource deleted.", "success");
+            DEIY.go("#/app/library");
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the resource.", "error");
+            button.disabled = false;
+          }
+        });
+      });
       root.querySelectorAll("[data-variant]").forEach(function (button) {
         button.addEventListener("click", async function () {
           button.disabled = true;

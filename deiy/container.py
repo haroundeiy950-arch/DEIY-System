@@ -161,7 +161,7 @@ def build_container(settings: Settings | None = None, db: Database | None = None
     return container
 
 
-# --------------------------------------------------------------------- jobs
+
 def _register_jobs(container: AppContainer) -> None:
     container.queue.register("media.transcode", container.library.transcode_resource)
     container.queue.register("media.archive_recording", container.library.archive_recording)
@@ -170,7 +170,7 @@ def _register_jobs(container: AppContainer) -> None:
     container.queue.register("room.autoclose", container.rooms.auto_close)
 
 
-# ------------------------------------------------------------------- events
+
 def _wire_events(container: AppContainer) -> None:
     events = container.events
     utilities = container.utilities

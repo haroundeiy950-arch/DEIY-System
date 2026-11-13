@@ -52,7 +52,7 @@ class AttendanceRequest(BaseModel):
     occurred_at: datetime | None = None
 
 
-# ------------------------------------------------------------------- calendar
+
 @router.get("/calendar")
 def calendar(
     user: User = Depends(get_current_user),
@@ -62,7 +62,7 @@ def calendar(
     return {"count": len(events), "events": events}
 
 
-# ------------------------------------------------------------------- gradebook
+
 @router.get("/gradebook")
 def gradebook(
     student_id: str | None = None,
@@ -83,7 +83,7 @@ def gradebook(
     return container.utilities.gradebook(target, include_insights=insights)
 
 
-# --------------------------------------------------------------- notifications
+
 @router.get("/notifications")
 def notifications(
     unread_only: bool = False,
@@ -111,7 +111,17 @@ def read_one(
     return container.utilities.mark_read(user.id, notification_id)
 
 
-# ------------------------------------------------------------------- helpdesk
+
+@router.delete("/notifications/{notification_id}")
+def delete_notification(
+    notification_id: str,
+    user: User = Depends(get_current_user),
+    container=Depends(get_container),
+):
+    container.utilities.delete_notification(user.id, notification_id)
+    return {"message": "Notification deleted."}
+
+
 @router.post("/helpdesk")
 def helpdesk(
     payload: HelpdeskRequest,
@@ -142,6 +152,16 @@ def list_tickets(
     return {"count": len(rows), "tickets": rows}
 
 
+@router.delete("/tickets/{ticket_id}")
+def delete_ticket(
+    ticket_id: str,
+    user: User = Depends(get_current_user),
+    container=Depends(get_container),
+):
+    container.utilities.delete_ticket(ticket_id, user)
+    return {"message": "Ticket deleted."}
+
+
 @router.get("/tickets/{ticket_id}")
 def get_ticket(
     ticket_id: str,
@@ -158,7 +178,7 @@ def reply_ticket(
     user: User = Depends(get_current_user),
     container=Depends(get_container),
 ):
-    container.utilities.get_ticket(ticket_id, user)  # permission check
+    container.utilities.get_ticket(ticket_id, user) 
     role = "staff" if user.role in {"admin", "teacher"} else "user"
     message = container.utilities.reply_ticket(ticket_id, user.id, role, payload.body)
     return {"message_id": message.id, "status": "pending" if role == "staff" else "open"}
@@ -174,7 +194,7 @@ def resolve_ticket(
     return {"ticket": {"id": ticket.id, "status": ticket.status}}
 
 
-# ----------------------------------------------------------------- assignments
+
 @router.post("/assignments", status_code=201)
 def create_assignment(
     payload: AssignmentRequest,
@@ -193,6 +213,16 @@ def list_assignments(
 ):
     rows = container.utilities.list_assignments(course_id=course_id)
     return {"count": len(rows), "assignments": [assignment_public(r) for r in rows]}
+
+
+@router.delete("/assignments/{assignment_id}")
+def delete_assignment(
+    assignment_id: str,
+    user: User = Depends(require_roles("admin", "teacher")),
+    container=Depends(get_container),
+):
+    container.utilities.delete_assignment(assignment_id, actor_id=user.id)
+    return {"message": "Assignment deleted."}
 
 
 @router.post("/assignments/{assignment_id}/submit")
@@ -255,7 +285,7 @@ def grade_submission(
     }
 
 
-# ----------------------------------------------------------------- attendance
+
 @router.post("/attendance", status_code=201)
 def record_attendance(
     payload: AttendanceRequest,
@@ -280,7 +310,8 @@ def student_attendance(
     return {"student_id": student_id, "attendance": book["attendance"]}
 
 
-# -------------------------------------------------------------------- metrics
+
+
 @router.get("/metrics")
 def metrics(
     user: User = Depends(require_roles("admin")),

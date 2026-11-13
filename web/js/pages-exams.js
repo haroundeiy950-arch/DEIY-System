@@ -1,7 +1,3 @@
-/* ==========================================================================
-   DEIY exams: list, camera verification, timed attempt with autosave,
-   proctoring events, submission and results.
-   ========================================================================== */
 (function () {
   "use strict";
 
@@ -20,7 +16,7 @@
     return { open: true, label: "Open now · closes " + ui.fmtRelative(exam.ends_at) };
   }
 
-  function examCard(exam) {
+  function examCard(exam, canManage) {
     const state = examWindow(exam);
     return (
       '<article class="resource-card"><div class="resource-cover" data-kind="pdf" style="height:88px">' +
@@ -32,12 +28,18 @@
       '<span class="resource-meta">' + ui.esc(ui.fmtDate(exam.starts_at, true)) + " → " +
       ui.esc(ui.fmtDate(exam.ends_at, true)) + "</span>" +
       '<p class="small muted">' + ui.esc(state.label) + "</p>" +
-      '<a class="btn btn-sm btn-primary" href="#/app/exams/' + encodeURIComponent(exam.id) + '">' +
-      (state.open ? ui.icon("play") + " Open exam" : ui.icon("info") + " View details") + "</a></div></article>"
+      '<div class="row" style="gap:0.4rem"><a class="btn btn-sm btn-primary" href="#/app/exams/' +
+      encodeURIComponent(exam.id) + '">' +
+      (state.open ? ui.icon("play") + " Open exam" : ui.icon("info") + " View details") + "</a>" +
+      (canManage
+        ? '<button class="btn btn-sm btn-danger" type="button" data-delete-exam="' + ui.esc(exam.id) +
+          '" data-name="' + ui.esc(exam.title) + '">Delete</button>'
+        : "") +
+      "</div></div></article>"
     );
   }
 
-  /* ----------------------------------------------------------------- exam list */
+
   pages.exams = {
     app: true,
     title: "Exams",
@@ -67,7 +69,9 @@
         ui.icon("shield") + " Proctored</span><span class=\"badge badge-outline\">Autosave on</span>" +
         '<span class="badge badge-outline">Auto-submit on expiry</span></div>' +
         (exams.length
-          ? '<div class="resource-grid">' + exams.map(examCard).join("") + "</div>"
+          ? '<div class="resource-grid">' + exams.map(function (exam) {
+              return examCard(exam, isStaff);
+            }).join("") + "</div>"
           : ui.emptyState({
               icon: "exam",
               title: "No exams yet",
@@ -81,10 +85,33 @@
           '<button class="btn btn-ghost btn-sm" type="button" data-assistant="My camera is not working">' +
           "Camera help</button></div></div>")
       );
+    },
+    after: function (root, ctx) {
+      if (ctx.user.role === "student") return;
+      root.querySelectorAll("[data-delete-exam]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const id = button.getAttribute("data-delete-exam");
+          const name = button.getAttribute("data-name") || "this exam";
+          const ok = await ui.confirmDialog(
+            "Delete " + name + "? Questions, attempts, answers and proctor events will also be removed.",
+            { title: "Delete exam", confirmLabel: "Delete", danger: true }
+          );
+          if (!ok) return;
+          button.disabled = true;
+          try {
+            await api.deleteExam(id);
+            ui.toast("Exam deleted.", "success");
+            DEIY.rerender();
+          } catch (error) {
+            ui.toast(error.message || "Could not delete the exam.", "error");
+            button.disabled = false;
+          }
+        });
+      });
     }
   };
 
-  /* --------------------------------------------------------------- exam detail */
+
   pages.exam = {
     app: true,
     title: "Exam",
@@ -139,7 +166,7 @@
           '<div class="grid-2" style="margin-top:1rem;align-items:center">' +
           '<div class="camera-preview" id="camera-preview"><video id="camera-video" autoplay muted playsinline></video>' +
           '<span class="badge badge-outline camera-badge" id="camera-badge">Camera not checked</span></div>' +
-          '<div class="stack-sm"><p class="small" style="color:rgba(255,255,255,0.7)">' +
+          '<div class="stack-sm"><p class="small" style="color:rgba(249, 186, 38, 0.7)">' +
           "We check your camera before the timer starts. If you cannot see a preview, check browser permissions " +
           "and close other apps using the camera.</p>" +
           '<button class="btn btn-amber" type="button" id="check-camera"' + (state.open ? "" : " disabled") + ">" +
@@ -147,13 +174,18 @@
           '<button class="btn btn-light" type="button" id="start-exam" disabled>' +
           ui.icon("play") + " Start / resume exam</button>" +
           '<button class="btn btn-ghost btn-sm" type="button" data-assistant="My camera is not working" ' +
-          'style="color:#fff;border-color:rgba(255,255,255,0.25)">Camera help</button></div></div></div>'
+          'style="color:#fff;border-color:rgba(101, 252, 7, 0.25)">Camera help</button></div></div></div>'
         : "";
 
       return (
         ui.pageHead(exam.title, ui.titleCase(exam.status) + " · " + ui.fmtDate(exam.starts_at, true) +
           " → " + ui.fmtDate(exam.ends_at, true),
-          '<a class="btn btn-ghost btn-sm" href="#/app/exams">← Exams</a>') +
+          '<div class="row">' +
+          (!isStudent
+            ? '<button class="btn btn-danger btn-sm" type="button" data-delete-exam="' +
+              ui.esc(exam.id) + '" data-name="' + ui.esc(exam.title) + '">Delete exam</button>'
+            : "") +
+          '<a class="btn btn-ghost btn-sm" href="#/app/exams">← Exams</a></div>') +
         startPanel +
         '<div class="grid-2" style="align-items:start;margin-top:1rem">' +
         '<div class="panel"><div class="panel-head"><h3>Exam details</h3>' +
@@ -280,6 +312,27 @@
         }
       });
     },
+    after: function (root, ctx) {
+      const button = root.querySelector("[data-delete-exam]");
+      if (!button || ctx.user.role === "student") return;
+      button.addEventListener("click", async function () {
+        const name = button.getAttribute("data-name") || "this exam";
+        const ok = await ui.confirmDialog(
+          "Delete " + name + "? Questions, attempts, answers and proctor events will also be removed.",
+          { title: "Delete exam", confirmLabel: "Delete", danger: true }
+        );
+        if (!ok) return;
+        button.disabled = true;
+        try {
+          await api.deleteExam(button.getAttribute("data-delete-exam"));
+          ui.toast("Exam deleted.", "success");
+          DEIY.go("#/app/exams");
+        } catch (error) {
+          ui.toast(error.message || "Could not delete the exam.", "error");
+          button.disabled = false;
+        }
+      });
+    },
     destroy: function () {
       if (DEIY.state.cameraStream) {
         DEIY.state.cameraStream.getTracks().forEach(function (track) { track.stop(); });
@@ -288,7 +341,7 @@
     }
   };
 
-  /* --------------------------------------------------------------- exam attempt */
+ 
   pages.attempt = {
     app: true,
     title: "Exam attempt",

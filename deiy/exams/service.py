@@ -54,7 +54,7 @@ class ExamService:
         self.queue = queue
         self.events = events
 
-    # ------------------------------------------------------------------ authoring
+   
     def create_exam(self, data: dict, *, actor_id: str | None = None) -> dict:
         title = (data.get("title") or "").strip()
         starts_at = data.get("starts_at")
@@ -140,6 +140,52 @@ class ExamService:
                 query = query.where(Exam.course_id == course_id)
             return list(session.execute(query.order_by(Exam.starts_at)).scalars().all())
 
+    def delete_exam(self, exam_id: str, *, actor_id: str | None = None) -> dict:
+        with self.db.session() as session:
+            exam = session.get(Exam, exam_id)
+            if exam is None:
+                raise NotFound("Exam not found.")
+            attempt_ids = [
+                row.id
+                for row in session.execute(
+                    select(ExamAttempt).where(ExamAttempt.exam_id == exam_id)
+                ).scalars().all()
+            ]
+            if attempt_ids:
+                session.query(ExamAnswer).filter(
+                    ExamAnswer.attempt_id.in_(attempt_ids)
+                ).delete(synchronize_session=False)
+                session.query(ProctorEvent).filter(
+                    ProctorEvent.attempt_id.in_(attempt_ids)
+                ).delete(synchronize_session=False)
+            session.query(ExamAttempt).filter(ExamAttempt.exam_id == exam_id).delete(
+                synchronize_session=False
+            )
+            question_ids = [
+                row.id
+                for row in session.execute(
+                    select(ExamQuestion).where(ExamQuestion.exam_id == exam_id)
+                ).scalars().all()
+            ]
+            if question_ids:
+                session.query(ExamAnswer).filter(
+                    ExamAnswer.question_id.in_(question_ids)
+                ).delete(synchronize_session=False)
+            session.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).delete(
+                synchronize_session=False
+            )
+            payload = exam_public(exam)
+            record_audit(
+                session,
+                action="exam.deleted",
+                actor_id=actor_id,
+                target=exam.id,
+                meta={"title": exam.title, "attempts": len(attempt_ids)},
+            )
+            session.delete(exam)
+            session.flush()
+            return payload
+
     def get_exam(self, exam_id: str, *, include_key: bool = False) -> dict:
         with self.db.session() as session:
             exam = session.get(Exam, exam_id)
@@ -155,7 +201,7 @@ class ExamService:
                 "questions": [question_public(q, include_key=include_key) for q in questions],
             }
 
-    # --------------------------------------------------------------- attempts
+    
     def camera_check(self, exam_id: str, *, device_id: str, stream_ok: bool) -> dict:
         if not device_id.strip():
             raise ValidationFailed("Camera device id is required.")
@@ -304,7 +350,7 @@ class ExamService:
                 ],
             }
 
-    # -------------------------------------------------------------- autosave
+    
     def autosave(
         self,
         attempt_id: str,
@@ -383,7 +429,7 @@ class ExamService:
             )
         raise Conflict("Autosave failed.", code="autosave_failed")
 
-    # ---------------------------------------------------------------- submit
+    
     def submit(self, attempt_id: str, student_id: str) -> dict:
         return self._finalize(attempt_id, student_id=student_id, auto=False)
 
@@ -515,7 +561,7 @@ class ExamService:
         )
         return float(result.score), result.feedback, result.provider
 
-    # ------------------------------------------------------------- proctoring
+    
     def record_events(self, attempt_id: str, events: list[dict], *, actor: User | None = None) -> dict:
         with self.db.session() as session:
             attempt = session.get(ExamAttempt, attempt_id)
@@ -585,7 +631,7 @@ class ExamService:
                 ).scalars().all()
             )
 
-    # -------------------------------------------------------------------- job
+    
     def expire_attempt(self, payload: dict) -> None:
         self.auto_submit(payload["attempt_id"])
 

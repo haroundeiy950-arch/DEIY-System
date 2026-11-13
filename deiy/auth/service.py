@@ -106,7 +106,7 @@ class AuthService:
         self.events = events
         self.storage = storage
 
-    # ------------------------------------------------------------- validation
+   
     def _validate_registration(self, data: dict) -> tuple[list[str], date]:
         parts = split_name(data.get("full_name", ""))
         if len(parts) < 4:
@@ -190,7 +190,7 @@ class AuthService:
             return self.storage.presign(key, ttl_seconds=7 * 24 * 3600)
         return key
 
-    # ------------------------------------------------------------- registration
+    
     def register(self, data: dict) -> dict:
         parts, dob = self._validate_registration(data)
         email = data["email"]
@@ -314,7 +314,7 @@ class AuthService:
             ),
         )
 
-    # ------------------------------------------------------------- verification
+    
     def verify_email(
         self,
         *,
@@ -331,8 +331,9 @@ class AuthService:
                     select(User).where(User.email == email.strip().lower())
                 ).scalar_one_or_none()
             elif token:
-                # Activation links must work even when the visitor does not type
-                # their email address again.
+
+
+                
                 try:
                     from deiy.security import decode_token
 
@@ -425,7 +426,7 @@ class AuthService:
             "dev_code": code if self.settings.expose_dev_codes and not self.settings.is_production else None,
         }
 
-    # ---------------------------------------------------------------- approval
+    
     def approve(self, user_id: str, *, actor_id: str | None = None) -> User:
         with self.db.session() as session:
             user = session.get(User, user_id)
@@ -531,7 +532,7 @@ class AuthService:
                 return candidate
         raise Conflict("Academic ID space exhausted.")
 
-    # --------------------------------------------------------------- staff/admin
+    
     def create_staff(self, data: dict, *, role: str, actor_id: str | None = None) -> User:
         if role not in {"admin", "teacher", "proctor"}:
             raise ValidationFailed("Staff role must be admin, teacher or proctor.")
@@ -607,7 +608,7 @@ class AuthService:
             session.flush()
             return user
 
-    # ------------------------------------------------------------------- login
+    
     def login(self, email: str, password: str) -> tuple[str, User]:
         with self.db.session() as session:
             user = session.execute(
@@ -701,7 +702,7 @@ class AuthService:
             session.flush()
             return user
 
-    # ------------------------------------------------------------- update/delete
+    
     def update_user(
         self, user_id: str, changes: dict, *, actor_id: str | None = None
     ) -> User:
@@ -924,7 +925,7 @@ class AuthService:
             user.status = "deleted"
             user.email_verified = False
             user.rejection_reason = "Account deleted by an administrator."
-            # Release the address so the same person can submit a new application.
+            
             user.email = f"deleted+{user.id}@deiy.invalid"
             record_audit(
                 session,

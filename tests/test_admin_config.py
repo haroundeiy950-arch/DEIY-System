@@ -51,7 +51,7 @@ def test_admin_config_update_is_audited_and_persisted(
         item["action"] == "admin.config.updated" for item in logs["logs"]
     )
 
-    # A fresh process/container must reload the persisted overrides.
+   
     fresh_settings = Settings(
         environment="test",
         secret_key=settings.secret_key,

@@ -38,5 +38,5 @@ class EventBus:
     def _dispatch(handler: Handler, event: str, payload: dict[str, Any]) -> None:
         try:
             handler(event, payload)
-        except Exception:  # pragma: no cover - handlers must never break a request
+        except Exception: 
             logger.exception("event handler failed for %s", event)

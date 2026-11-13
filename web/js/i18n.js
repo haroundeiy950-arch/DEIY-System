@@ -1,9 +1,3 @@
-/* ==========================================================================
-   DEIY translations: English (default), Somali and Arabic.
-   The UI is rendered as plain HTML, so this module also walks the rendered
-   tree and replaces exact English labels. Anything without a translation
-   falls back to English, which keeps the app usable while translations grow.
-   ========================================================================== */
 (function () {
   "use strict";
 
@@ -284,7 +278,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, code);
     } catch (_) {
-      /* private mode */
+      
     }
     applyDocument();
     window.dispatchEvent(

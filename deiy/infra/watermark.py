@@ -46,7 +46,7 @@ class WatermarkService:
                 "position": "moving",
                 "opacity": 0.35,
                 "font_size": 14,
-                "color": "#ffffff",
+                "color": "#eb9f12",
                 "shadow": True,
                 "move_interval_seconds": 7,
                 "applies_to": ["video", "document", "download"],

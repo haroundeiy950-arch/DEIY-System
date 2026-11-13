@@ -59,6 +59,16 @@ def create_course(
     return {"course": course_public(course)}
 
 
+@router.delete("/courses/{course_id}")
+def delete_course(
+    course_id: str,
+    user: User = Depends(require_roles("admin", "teacher")),
+    container=Depends(get_container),
+):
+    course = container.library.delete_course(course_id, actor_id=user.id)
+    return {"message": "Course deleted.", "course": course_public(course)}
+
+
 @router.get("/courses")
 def list_courses(
     department: str | None = None,
@@ -126,6 +136,16 @@ def search_resources(
         level=level,
         limit=limit,
     )
+
+
+@router.delete("/resources/{resource_id}")
+def delete_resource(
+    resource_id: str,
+    user: User = Depends(require_roles("admin", "teacher")),
+    container=Depends(get_container),
+):
+    resource = container.library.delete_resource(resource_id, actor_id=user.id)
+    return {"message": "Resource deleted.", "resource": resource_public(resource)}
 
 
 @router.get("/resources/{resource_id}")
@@ -202,6 +222,16 @@ def list_sessions(
 ):
     rows = container.library.list_sessions(course_id=course_id)
     return {"count": len(rows), "sessions": [live_session_public(r) for r in rows]}
+
+
+@router.delete("/live-sessions/{session_id}")
+def delete_session(
+    session_id: str,
+    user: User = Depends(require_roles("admin", "teacher")),
+    container=Depends(get_container),
+):
+    row = container.library.delete_session(session_id, actor_id=user.id)
+    return {"message": "Live session deleted.", "session": live_session_public(row)}
 
 
 @router.post("/live-sessions/{session_id}/start")

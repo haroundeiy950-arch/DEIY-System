@@ -43,7 +43,7 @@ def test_seed_is_repeatable_and_wired(tmp_path):
             first["students"][1].academic_id,
         ]
 
-        # Seeded actions exercise the AI gateway.
+        
         assert second["attempt"].score is not None
         assert second["attempt"].integrity is not None
         assert second["room_summary"].status == "ready"
