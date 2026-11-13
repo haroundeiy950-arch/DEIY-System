@@ -1,4 +1,4 @@
-"""FastAPI application factory and HTTP surface assembly."""
+﻿"""FastAPI application factory and HTTP surface assembly."""
 
 from __future__ import annotations
 
